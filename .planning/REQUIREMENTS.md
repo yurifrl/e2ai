@@ -106,8 +106,8 @@ Requirements for initial release. Each maps to a roadmap phase (P1–P5 per rese
 | Flake Governance & Trends | FLAK-01..02, TREN-01, MCP-01, EDGE-01 | 5 |
 
 **Coverage:**
-- v1 requirements: 40 total
-- Mapped to phases: 40
+- v1 requirements: 45 total
+- Mapped to phases: 45
 - Unmapped: 0 ✓
 
 ---
