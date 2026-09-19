@@ -1,0 +1,288 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>003 — Plans & Approvals · e2ai sketches</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;600;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="../themes/default.css">
+<link rel="stylesheet" href="../themes/shared.css">
+<style>
+  .toolbar { display: flex; gap: 10px; align-items: center; margin-bottom: var(--space-4); flex-wrap: wrap; }
+  .toolbar .spacer { flex: 1; }
+  .approvals-head { font-size: var(--text-lg); font-weight: 700; margin: var(--space-8) 0 var(--space-3); }
+  .qrow { display: grid; grid-template-columns: 1fr auto; gap: var(--space-3); padding: var(--space-4); border-bottom: 1px solid var(--border); align-items: center; }
+  .qrow:last-child { border-bottom: none; }
+  .qrow .info b { font-size: var(--text-sm); display: inline-flex; gap: 8px; align-items: center; flex-wrap: wrap; }
+  .qrow .info span { font-size: var(--text-xs); color: var(--fg-muted); display: block; margin-top: 4px; }
+  .qrow .acts { display: flex; gap: 8px; }
+  .qrow.dis { opacity: 0.45; }
+  .diffpanel { display: none; margin: 0 var(--space-4) var(--space-4); border-radius: var(--radius-sm); overflow: hidden; border: 1px solid var(--border); }
+  .qrow.open + .diffpanel, .diffpanel.on { display: block; }
+  .diffpanel .h { padding: 7px 12px; font-family: var(--font-mono); font-size: 11px; background: var(--surface-3); color: var(--fg-muted); }
+  .diffpanel pre { font-family: var(--font-mono); font-size: 11.5px; line-height: 1.6; padding: 10px 12px; background: var(--surface); overflow-x: auto; }
+  .diffpanel .add { background: var(--success-soft); color: var(--success-dark, hsl(151 67% 24%)); display: block; }
+  .diffpanel .del { background: var(--danger-soft); color: var(--danger); display: block; }
+
+  /* Variant B — two pane */
+  .panes { display: grid; grid-template-columns: 340px 1fr; gap: var(--space-6); align-items: start; }
+  .lib .group h4 { font-size: var(--text-xs); text-transform: uppercase; letter-spacing: 0.07em; color: var(--fg-faint); padding: var(--space-3) var(--space-4) 6px; font-weight: 600; }
+  .lib .pl { display: flex; align-items: center; gap: 9px; padding: 9px var(--space-4); cursor: pointer; border-left: 2px solid transparent; }
+  .lib .pl:hover { background: var(--surface-2); }
+  .lib .pl.on { background: var(--primary-soft); border-left-color: var(--primary); }
+  .lib .pl b { font-size: var(--text-sm); font-weight: 600; flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .lib .pl .chips { display: flex; gap: 5px; flex: none; }
+  .prev { padding: 0; }
+  .prev .phead { padding: var(--space-4) var(--space-6); border-bottom: 1px solid var(--border); display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+  .prev .phead b { font-family: var(--font-mono); font-size: var(--text-lg); }
+  .prev .pbody { padding: var(--space-4) var(--space-6); }
+  .prev .pbody.raw { font-family: var(--font-mono); font-size: 12px; line-height: 1.65; white-space: pre-wrap; background: var(--surface-2); border-radius: 0 0 var(--radius) var(--radius); }
+  .prev .stepcard { display: flex; gap: 10px; padding: 10px 12px; border: 1px solid var(--border); border-radius: var(--radius-sm); margin-bottom: 10px; align-items: baseline; }
+  .prev .stepcard .nn { font-family: var(--font-mono); font-size: 11px; font-weight: 700; color: var(--primary); }
+  .prev .stepcard p { font-size: var(--text-sm); flex: 1; }
+  .prev .sec h5 { font-size: var(--text-xs); text-transform: uppercase; letter-spacing: 0.07em; color: var(--fg-faint); margin: var(--space-4) 0 8px; font-weight: 600; }
+  .prev .bref { display: inline-flex; gap: 6px; align-items: center; font-family: var(--font-mono); font-size: 11.5px; padding: 4px 10px; border-radius: var(--radius-full); background: var(--success-soft); color: var(--success); border: 1px solid hsl(151 56% 42% / 0.3); margin: 0 6px 6px 0; }
+  .approvalbar { margin: var(--space-4) var(--space-6); padding: var(--space-3) var(--space-4); border-radius: var(--radius); background: var(--warning-soft); border: 1px solid hsl(24 74% 50% / 0.3); display: flex; align-items: center; gap: 10px; }
+  .approvalbar p { font-size: var(--text-sm); flex: 1; }
+</style>
+</head>
+<body>
+<div class="variant-bar">
+  <span class="vl">Variant</span>
+  <button data-v="A" class="on">A · Table + Queue</button>
+  <button data-v="B">B · Library + Preview</button>
+  <span class="note">003 · plans-approvals</span>
+</div>
+
+<div id="vA" class="variant on">
+  <div class="shell">
+    <aside class="side" id="sidebar"></aside>
+    <main class="main">
+      <div class="pagehead">
+        <div><h1>Plans</h1><div class="sub">Declarative test plans · approved plans auto-run on deploy</div></div>
+        <button class="btn primary sm">+ New plan draft</button>
+      </div>
+
+      <div class="toolbar">
+        <input class="input" placeholder="Search plans…" style="width:220px">
+        <select class="input"><option>All apps</option><option>bet-client</option><option>native</option><option>sso</option><option>rules</option></select>
+        <select class="input"><option>All status</option><option>Active</option><option>Pending approval</option><option>Draft</option><option>Archived</option></select>
+        <div class="spacer"></div>
+        <span class="chip">21 plans · 16 active</span>
+      </div>
+
+      <div class="card" style="overflow:hidden;">
+        <table class="tbl">
+          <thead><tr><th>Plan</th><th>App</th><th>Source</th><th>Ver.</th><th>Status</th><th>Last run</th><th>Steps</th></tr></thead>
+          <tbody>
+            <tr><td><b>checkout-flow-v3</b></td><td><span class="chip app">bet-client</span></td><td style="font-family:var(--font-mono); font-size:11.5px;">apps/bet-client/tests/plans</td><td style="font-family:var(--font-mono);">v3</td><td><span class="chip changed">CHANGED · pending</span></td><td><span class="chip fail">FAIL</span></td><td>23</td></tr>
+            <tr><td><b>match-list-v2</b></td><td><span class="chip app">bet-client</span></td><td style="font-family:var(--font-mono); font-size:11.5px;">apps/bet-client/tests/plans</td><td style="font-family:var(--font-mono);">v2</td><td><span class="chip pass">ACTIVE</span></td><td><span class="chip pass">PASS</span></td><td>11</td></tr>
+            <tr><td><b>deposit-sheet-v2</b></td><td><span class="chip app">native</span></td><td style="font-family:var(--font-mono); font-size:11.5px;">plans-repo/bet-app/native</td><td style="font-family:var(--font-mono);">v2</td><td><span class="chip pass">ACTIVE</span></td><td><span class="chip pass">PASS</span></td><td>14</td></tr>
+            <tr><td><b>bet-slip-v1</b></td><td><span class="chip app">native</span></td><td style="font-family:var(--font-mono); font-size:11.5px;">plans-repo/bet-app/native</td><td style="font-family:var(--font-mono);">v1</td><td><span class="chip pass">ACTIVE</span></td><td><span class="chip pass">PASS</span></td><td>9</td></tr>
+            <tr><td><b>login-session-v1</b></td><td><span class="chip app">sso</span></td><td style="font-family:var(--font-mono); font-size:11.5px;">apps/sso/tests/plans</td><td style="font-family:var(--font-mono);">v1</td><td><span class="chip pass">ACTIVE</span></td><td><span class="chip flaky">FLAKY</span></td><td>7</td></tr>
+            <tr><td><b>sso-redirect-v1</b></td><td><span class="chip app">sso</span></td><td style="font-family:var(--font-mono); font-size:11.5px;">apps/sso/tests/plans</td><td style="font-family:var(--font-mono);">v1</td><td><span class="chip pass">ACTIVE</span></td><td><span class="chip pass">PASS</span></td><td>5</td></tr>
+            <tr><td><b>rules-viewer-v1</b></td><td><span class="chip app">rules</span></td><td style="font-family:var(--font-mono); font-size:11.5px;">apps/rules/tests/plans</td><td style="font-family:var(--font-mono);">v1</td><td><span class="chip pass">ACTIVE</span></td><td><span class="chip pass">PASS</span></td><td>6</td></tr>
+            <tr><td><b>withdrawal-flow-v1</b></td><td><span class="chip app">bet-client</span></td><td style="font-family:var(--font-mono); font-size:11.5px;">agent-draft (Plan Author)</td><td style="font-family:var(--font-mono);">v1</td><td><span class="chip new">NEW · pending</span></td><td style="color:var(--fg-faint);">—</td><td>16</td></tr>
+          </tbody>
+        </table>
+      </div>
+
+      <div class="approvals-head">Pending approvals (2)</div>
+      <div class="card" style="margin-bottom: var(--space-8);">
+        <div class="qrow" data-q="1">
+          <div class="info">
+            <b>checkout-flow-v3 <span class="chip changed">CHANGED</span><span class="chip app">bet-client</span></b>
+            <span>PR #4812 touched slip totals · 4 of 23 steps affected · drafted by Plan Author from PR diff</span>
+          </div>
+          <div class="acts">
+            <button class="btn sm">View diff</button>
+            <button class="btn approve sm q-approve">Approve</button>
+            <button class="btn reject sm q-reject">Reject</button>
+          </div>
+        </div>
+        <div class="diffpanel" id="diff1">
+          <div class="h">checkout-flow-v3.md · 4 lines changed</div>
+          <pre><span class="del">- 14. Submit slip with stake R$50, expect confirmation screen within 3s</span><span class="add">+ 14. Submit slip with stake R$50, expect disabled confirm until totals API returns odds bundle (new guard)</span><span class="add">+ 14b. Assert slip total compounds 3 selections × stake exactly once (behavior: SLIP-CONFIRM-GUARDS)</span><span class="del">- 15. Retry submit once on failure</span><span class="add">+ 15. Fresh session diagnostic on failure (report only, never blocking)</span></pre>
+        </div>
+        <div class="qrow" data-q="2">
+          <div class="info">
+            <b>withdrawal-flow-v1 <span class="chip new">NEW</span><span class="chip app">bet-client</span></b>
+            <span>Plan Author read PR #4819's withdrawal sheet changes and drafted a 16-step plan · needs your review before it joins the arm</span>
+          </div>
+          <div class="acts">
+            <button class="btn sm">Preview</button>
+            <button class="btn approve sm q-approve">Approve</button>
+            <button class="btn reject sm q-reject">Reject</button>
+          </div>
+        </div>
+        <div class="diffpanel" id="diff2">
+          <div class="h">withdrawal-flow-v1.md · proposed frontmatter</div>
+          <pre><span class="add">id: withdrawal-flow-v1</span><span class="add">app: bet-client</span><span class="add">surfaces: [web, ios-simulator, android-emulator]</span><span class="add">uses: [WITHDRAWAL-LIMITS, PIX-TIMEOUT]</span></pre>
+        </div>
+      </div>
+    </main>
+  </div>
+</div>
+
+<div id="vB" class="variant">
+  <div class="shell">
+    <aside class="side" id="sidebarB"></aside>
+    <main class="main">
+      <div class="pagehead">
+        <div><h1>Plans</h1><div class="sub">Library and preview · declarative markdown</div></div>
+        <div style="display:flex; gap:8px;">
+          <button class="btn sm" id="modeRaw">Raw</button>
+          <button class="btn sm on" id="modePrev">Preview</button>
+        </div>
+      </div>
+
+      <div class="panes">
+        <div class="card lib">
+          <div class="group"><h4>bet-client</h4>
+            <div class="pl on"><b>checkout-flow-v3</b><div class="chips"><span class="chip changed">CHANGED</span></div></div>
+            <div class="pl"><b>match-list-v2</b><div class="chips"><span class="chip pass">ACTIVE</span></div></div>
+            <div class="pl"><b>withdrawal-flow-v1</b><div class="chips"><span class="chip new">NEW</span></div></div>
+          </div>
+          <div class="group"><h4>native</h4>
+            <div class="pl"><b>deposit-sheet-v2</b><div class="chips"><span class="chip pass">ACTIVE</span></div></div>
+            <div class="pl"><b>bet-slip-v1</b><div class="chips"><span class="chip pass">ACTIVE</span></div></div>
+          </div>
+          <div class="group"><h4>sso</h4>
+            <div class="pl"><b>login-session-v1</b><div class="chips"><span class="chip pass">ACTIVE</span></div></div>
+            <div class="pl"><b>sso-redirect-v1</b><div class="chips"><span class="chip pass">ACTIVE</span></div></div>
+          </div>
+          <div class="group"><h4>rules</h4>
+            <div class="pl"><b>rules-viewer-v1</b><div class="chips"><span class="chip pass">ACTIVE</span></div></div>
+          </div>
+        </div>
+
+        <div class="card prev">
+          <div class="phead">
+            <b>checkout-flow-v3.md</b>
+            <span class="chip app">bet-client</span>
+            <span class="chip changed">CHANGED · awaiting approval</span>
+            <span class="chip" style="margin-left:auto;">web · iOS · Android</span>
+          </div>
+          <div class="pbody" id="rendered">
+            <div class="sec"><h5>Purpose</h5>
+              <p style="font-size: var(--text-sm); line-height: 1.6; max-width: 620px;">Verify the full checkout path: build a slip from the match list, compound selections, confirm, and reach the confirmation screen. Guarded by the behavior corpus; failures report to the PR, never block.</p>
+            </div>
+            <div class="sec"><h5>Steps</h5>
+              <div class="stepcard"><span class="nn">01</span><p><b>Open home, wait for match list</b> — <span style="color:var(--fg-muted);">Navigator loads the web home, Vision Judge confirms 12 live match cards render.</span></p></div>
+              <div class="stepcard"><span class="nn">07</span><p><b>Tap first match, add selection to slip</b> — slip panel opens with odds 2.40. <span class="bref">SLIP-TOTAL-COMPOUNDS</span></p></div>
+              <div class="stepcard"><span class="nn">14</span><p><b>Submit slip with stake R$50</b> — confirm stays disabled until totals API returns the odds bundle. <span class="bref">SLIP-CONFIRM-GUARDS</span></p></div>
+              <div class="stepcard"><span class="nn">15</span><p><b>On failure: fresh-session diagnostic</b> — evidence for the Flakiness Analyst, report only.</p></div>
+            </div>
+            <div class="sec"><h5>Expected behaviors used</h5>
+              <div><span class="bref">SLIP-TOTAL-COMPOUNDS</span><span class="bref">SLIP-CONFIRM-GUARDS</span><span class="bref">MATCH-LIVE-BADGE</span><span class="bref">ODDS-FORMAT-BRL</span></div>
+            </div>
+            <div class="sec"><h5>Provenance</h5>
+              <p style="font-size: var(--text-xs); color: var(--fg-muted); font-family: var(--font-mono);">drafted by plan-author from PR #4812 diff · approved by @yuri on 09-12 · source: apps/bet-client/tests/plans</p>
+            </div>
+          </div>
+          <div class="pbody raw" id="raw" style="display:none;">---
+id: checkout-flow-v3
+app: bet-client
+title: Checkout flow end-to-end
+surfaces: [web, ios-simulator, android-emulator]
+trigger: on-deploy
+---
+# Purpose
+Verify the full checkout path: build a slip from the match
+list, compound selections, confirm, reach confirmation.
+Failures report to the PR, never block.
+
+## Steps
+1. Navigate to home. Intent: see the live match list.
+   - judge: >= 12 match cards visible
+2. Tap first match, add selection to slip.
+   - uses: SLIP-TOTAL-COMPOUNDS
+7. Slip panel opens at odds 2.40.
+14. Submit slip with stake 50.
+   - judge: confirm disabled until totals API
+     returns odds bundle
+   - uses: SLIP-CONFIRM-GUARDS
+15. On failure: fresh-session diagnostic.
+   - report only, never blocking
+
+## Assertions
+- slip total compounds selections x stake
+- confirmation screen within 3s of enabled confirm</div>
+          <div class="approvalbar">
+            <p><b>CHANGED pending approval.</b> PR #4812 touched slip totals — new guard step 14 + behavior SLIP-CONFIRM-GUARDS. Approving makes this the version that runs on the next deploy.</p>
+            <button class="btn approve sm q-approve">Approve</button>
+            <button class="btn reject sm q-reject">Reject</button>
+          </div>
+        </div>
+      </div>
+    </main>
+  </div>
+</div>
+
+<div class="toast" id="toast"></div>
+<script>
+const NAV = (active) => `
+  <div class="brand"><div class="mark">e2</div><div><b>e2ai</b><span>@admin/e2ai</span></div></div>
+  <nav style="display:flex; flex-direction:column; gap:var(--space-6); flex:1;">
+    <div class="nav-group"><h4>QA Arm</h4>
+      <a class="nav-item" href="#">Command Center</a>
+      <a class="nav-item" href="#">Runs</a>
+      <a class="nav-item" href="#">Reports</a>
+    </div>
+    <div class="nav-group"><h4>Library</h4>
+      <a class="nav-item ${active === 'Plans' ? 'active' : ''}" href="#">Plans</a>
+      <a class="nav-item" href="#">Approvals <span class="n">2</span></a>
+      <a class="nav-item" href="#">Behaviors</a>
+    </div>
+    <div class="nav-group"><h4>Admin</h4>
+      <a class="nav-item" href="#">Apps</a>
+    </div>
+  </nav>
+  <div style="font-size:10.5px; color:var(--fg-faint); font-family:var(--font-mono); line-height:1.5;">runs inside<br>@nsxbet/admin shell</div>`;
+document.getElementById('sidebar').innerHTML = NAV('Plans');
+document.getElementById('sidebarB').innerHTML = NAV('Plans');
+
+document.querySelectorAll('.variant-bar button').forEach(b => b.addEventListener('click', () => {
+  document.querySelectorAll('.variant-bar button').forEach(x => x.classList.remove('on'));
+  document.querySelectorAll('.variant').forEach(x => x.classList.remove('on'));
+  b.classList.add('on'); document.getElementById('v' + b.dataset.v).classList.add('on');
+}));
+
+// variant A: view diff toggles + approvals
+document.querySelectorAll('.qrow .btn:not(.q-approve):not(.q-reject)').forEach(b => b.addEventListener('click', () => {
+  const q = b.closest('.qrow');
+  const d = document.getElementById('diff' + q.dataset.q);
+  d.classList.toggle('on');
+  b.textContent = d.classList.contains('on') ? 'Hide diff' : 'View diff';
+}));
+document.querySelectorAll('.q-approve').forEach(b => b.addEventListener('click', () => {
+  const q = b.closest('.qrow'); if (q) { q.classList.add('dis'); q.querySelectorAll('button').forEach(x => x.disabled = true); b.textContent = 'Approved'; }
+  else b.textContent = 'Approved';
+  toast('Approved — runs on next deploy · PR comment posted');
+}));
+document.querySelectorAll('.q-reject').forEach(b => b.addEventListener('click', () => {
+  const q = b.closest('.qrow'); if (q) { q.classList.add('dis'); q.querySelectorAll('button').forEach(x => x.disabled = true); b.textContent = 'Rejected'; }
+  else b.textContent = 'Rejected';
+  toast('Rejected — Plan Author notified for rework');
+}));
+
+// variant B: library selection
+document.querySelectorAll('.lib .pl').forEach(p => p.addEventListener('click', () => {
+  document.querySelectorAll('.lib .pl').forEach(x => x.classList.remove('on'));
+  p.classList.add('on');
+  toast('Preview: ' + p.querySelector('b').textContent + '.md');
+}));
+
+// variant B: raw/preview toggle
+const mr = document.getElementById('modeRaw'), mp = document.getElementById('modePrev');
+mr.addEventListener('click', () => { mr.classList.add('on'); mp.classList.remove('on'); document.getElementById('raw').style.display = ''; document.getElementById('rendered').style.display = 'none'; });
+mp.addEventListener('click', () => { mp.classList.add('on'); mr.classList.remove('on'); document.getElementById('rendered').style.display = ''; document.getElementById('raw').style.display = 'none'; });
+
+function toast(msg) {
+  const t = document.getElementById('toast');
+  t.textContent = msg; t.classList.add('show');
+  clearTimeout(t._h); t._h = setTimeout(() => t.classList.remove('show'), 2400);
+}
+</script>
+</body>
+</html>

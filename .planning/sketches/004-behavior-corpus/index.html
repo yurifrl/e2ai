@@ -1,0 +1,273 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>004 — Behavior Corpus · e2ai sketches</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;600;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="../themes/default.css">
+<link rel="stylesheet" href="../themes/shared.css">
+<style>
+  .filters { display: flex; gap: 8px; margin-bottom: var(--space-5); flex-wrap: wrap; }
+  .filters .f { cursor: pointer; }
+  .filters .f.on { background: var(--primary); color: #fff; border-color: var(--primary); }
+
+  /* Variant A — gallery */
+  .corpus { display: grid; grid-template-columns: repeat(3, 1fr); gap: var(--space-4); }
+  .bcard { display: flex; flex-direction: column; overflow: hidden; }
+  .bcard .shot { aspect-ratio: 16/9; position: relative; }
+  .bcard .shot .mockshot { position: absolute; inset: 0; border: none; border-radius: 0; }
+  .bcard .cand { position: absolute; inset: 0; border: 2px dashed var(--warning); border-radius: 0; pointer-events: none; z-index: 2; }
+  .bcard .stale { position: absolute; inset: 0; background: repeating-linear-gradient(45deg, transparent, transparent 8px, hsl(24 74% 50% / 0.06) 8px, hsl(24 74% 50% / 0.06) 16px); z-index: 2; pointer-events: none; }
+  .bcard .bbody { padding: var(--space-3) var(--space-4); display: flex; flex-direction: column; gap: 8px; flex: 1; }
+  .bcard .bbody .id { font-family: var(--font-mono); font-size: 10.5px; font-weight: 700; color: var(--fg-faint); letter-spacing: 0.04em; }
+  .bcard .bbody p { font-size: var(--text-sm); line-height: 1.45; flex: 1; }
+  .bcard .bbody .meta { display: flex; align-items: center; gap: 8px; font-size: var(--text-xs); color: var(--fg-muted); }
+  .bcard .bbody .meta .src { font-family: var(--font-mono); font-size: 10.5px; }
+  .bcard .bact { padding: 0 var(--space-4) var(--space-3); display: flex; gap: 8px; }
+
+  /* Variant B — table + drawer */
+  .twocol { display: grid; grid-template-columns: 1fr; gap: var(--space-6); position: relative; }
+  .twocol.open { grid-template-columns: 1fr 380px; }
+  .drawer {
+    position: fixed; right: 0; top: 0; bottom: 0; width: 380px; z-index: 40;
+    background: var(--surface); border-left: 1px solid var(--border); box-shadow: var(--shadow-lg);
+    transform: translateX(100%); transition: transform 0.22s ease; overflow-y: auto;
+  }
+  .drawer.open { transform: none; }
+  .drawer .dhead { padding: var(--space-4) var(--space-5); border-bottom: 1px solid var(--border); display: flex; align-items: center; gap: 10px; }
+  .drawer .dhead b { font-family: var(--font-mono); font-size: var(--text-base); }
+  .drawer .dhead .x { margin-left: auto; cursor: pointer; color: var(--fg-muted); font-family: var(--font-mono); }
+  .drawer .dsec { padding: var(--space-4) var(--space-5); border-bottom: 1px solid var(--border); }
+  .drawer .dsec h5 { font-size: var(--text-xs); text-transform: uppercase; letter-spacing: 0.07em; color: var(--fg-faint); margin-bottom: 8px; font-weight: 600; }
+  .drawer .dsec p { font-size: var(--text-sm); line-height: 1.55; }
+  .drawer .dshot { aspect-ratio: 16/10; margin: var(--space-4) var(--space-5) 0; position: relative; }
+  .drawer .dshot .mockshot { position: absolute; inset: 0; }
+  .drawer .kv { display: flex; justify-content: space-between; font-size: var(--text-sm); padding: 4px 0; }
+  .drawer .kv b { font-weight: 600; }
+  .drawer .dfoot { position: sticky; bottom: 0; background: var(--surface); padding: var(--space-4) var(--space-5); border-top: 1px solid var(--border); display: flex; gap: 10px; }
+</style>
+</head>
+<body>
+<div class="variant-bar">
+  <span class="vl">Variant</span>
+  <button data-v="A" class="on">A · Corpus Gallery</button>
+  <button data-v="B">B · Table + Drawer</button>
+  <span class="note">004 · behavior-corpus</span>
+</div>
+
+<div id="vA" class="variant on">
+  <div class="shell">
+    <aside class="side" id="sidebar"></aside>
+    <main class="main">
+      <div class="pagehead">
+        <div><h1>Behavior Corpus</h1><div class="sub">What the app is supposed to do — auto-captured by the arm, promoted by humans. The dependency root of every plan.</div></div>
+      </div>
+
+      <div class="filters">
+        <span class="chip f on" data-f="all">All · 56</span>
+        <span class="chip flaky f" data-f="cand">Candidates · 6</span>
+        <span class="chip pass f" data-f="ver">Verified · 48</span>
+        <span class="chip changed f" data-f="stale">Stale · 2</span>
+      </div>
+
+      <div class="corpus" id="corpus">
+        <div class="card bcard" data-s="cand">
+          <div class="shot"><div class="cand"></div><div class="mockshot"><div class="bar"></div><div class="grid"><i></i><i class="bad"></i><i></i></div></div></div>
+          <div class="bbody">
+            <span class="id">SLIP-CONFIRM-GUARDS</span>
+            <p>Confirm button stays disabled until totals API returns a non-empty odds bundle for every selection in the slip.</p>
+            <div class="meta"><span class="chip new">CANDIDATE</span><span class="src">captured run #4812 · step 14</span></div>
+          </div>
+          <div class="bact"><button class="btn approve sm promote">Promote to verified</button><button class="btn sm reject discard">Discard</button></div>
+        </div>
+
+        <div class="card bcard" data-s="ver">
+          <div class="shot"><div class="mockshot"><div class="bar"></div><div class="grid"><i class="hl"></i><i></i><i></i></div></div></div>
+          <div class="bbody">
+            <span class="id">SLIP-TOTAL-COMPOUNDS</span>
+            <p>Slip total compounds every selection × stake exactly once; updates within 300ms of each change.</p>
+            <div class="meta"><span class="chip pass">VERIFIED</span><span class="src">verified @yuri · 09-05</span></div>
+          </div>
+          <div class="bact"><span class="chip" style="align-self:center; margin-left:2px;">used by 3 plans</span></div>
+        </div>
+
+        <div class="card bcard" data-s="ver">
+          <div class="shot"><div class="mockshot"><div class="bar"></div><div class="grid"><i></i><i class="hl"></i><i></i></div></div></div>
+          <div class="bbody">
+            <span class="id">MATCH-LIVE-BADGE</span>
+            <p>Live matches show the pulsing LIVE badge; odds tick only the changed cell, never the whole row.</p>
+            <div class="meta"><span class="chip pass">VERIFIED</span><span class="src">verified @yuri · 09-02</span></div>
+          </div>
+          <div class="bact"><span class="chip" style="align-self:center; margin-left:2px;">used by 2 plans</span></div>
+        </div>
+
+        <div class="card bcard" data-s="cand">
+          <div class="shot"><div class="cand"></div><div class="mockshot phone"><div class="bar"></div><div class="grid"><i></i><i></i></div><div class="tabbar"><i class="on"></i><i></i><i></i></div></div></div>
+          <div class="bbody">
+            <span class="id">DEPOSIT-SHEET-CAM-HIDE</span>
+            <p>On iOS the deposit sheet hides the camera caption when the keypad is open; on Android it stays.</p>
+            <div class="meta"><span class="chip new">CANDIDATE</span><span class="src">captured run #4814 · step 6</span></div>
+          </div>
+          <div class="bact"><button class="btn approve sm promote">Promote to verified</button><button class="btn sm reject discard">Discard</button></div>
+        </div>
+
+        <div class="card bcard" data-s="stale">
+          <div class="shot"><div class="stale"></div><div class="mockshot"><div class="bar"></div><div class="grid"><i class="bad"></i><i></i><i></i></div></div></div>
+          <div class="bbody">
+            <span class="id">LOGIN-KEYCLOAK-SPEED</span>
+            <p>Keycloak login page renders within 2s. Source changed: PR #4807 redesigned the login header.</p>
+            <div class="meta"><span class="chip changed">STALE</span><span class="src">source PR #4807 · needs re-capture</span></div>
+          </div>
+          <div class="bact"><button class="btn primary sm requeue">Re-capture on next deploy</button></div>
+        </div>
+
+        <div class="card bcard" data-s="ver">
+          <div class="shot"><div class="mockshot"><div class="bar"></div><div class="grid"><i></i><i></i><i class="hl"></i></div></div></div>
+          <div class="bbody">
+            <span class="id">ODDS-FORMAT-BRL</span>
+            <p>All odds render in Brazilian format (1.85), comma decimal on pt-BR locale, dot on en.</p>
+            <div class="meta"><span class="chip pass">VERIFIED</span><span class="src">verified @marina · 08-28</span></div>
+          </div>
+          <div class="bact"><span class="chip" style="align-self:center; margin-left:2px;">used by 5 plans</span></div>
+        </div>
+      </div>
+    </main>
+  </div>
+</div>
+
+<div id="vB" class="variant">
+  <div class="shell">
+    <aside class="side" id="sidebarB"></aside>
+    <main class="main">
+      <div class="pagehead">
+        <div><h1>Behavior Corpus</h1><div class="sub">Every behavior the arm knows. Click a row for full provenance.</div></div>
+        <input class="input" placeholder="Search behaviors…" style="width: 240px;">
+      </div>
+
+      <div class="card" style="overflow:hidden;">
+        <table class="tbl">
+          <thead><tr><th>ID</th><th>Summary</th><th>App</th><th>Status</th><th>Used by</th><th>Source</th></tr></thead>
+          <tbody id="rows">
+            <tr class="clickable" data-d="1"><td style="font-family:var(--font-mono); font-weight:700;">SLIP-CONFIRM-GUARDS</td><td>Confirm disabled until odds bundle non-empty</td><td><span class="chip app">bet-client</span></td><td><span class="chip new">CANDIDATE</span></td><td>1 plan</td><td style="font-family:var(--font-mono); font-size:11.5px;">run #4812</td></tr>
+            <tr class="clickable" data-d="2"><td style="font-family:var(--font-mono); font-weight:700;">SLIP-TOTAL-COMPOUNDS</td><td>Total compounds selections × stake once</td><td><span class="chip app">bet-client</span></td><td><span class="chip pass">VERIFIED</span></td><td>3 plans</td><td style="font-family:var(--font-mono); font-size:11.5px;">run #4802</td></tr>
+            <tr class="clickable" data-d="3"><td style="font-family:var(--font-mono); font-weight:700;">MATCH-LIVE-BADGE</td><td>Live badge pulses; odds tick per-cell only</td><td><span class="chip app">bet-client</span></td><td><span class="chip pass">VERIFIED</span></td><td>2 plans</td><td style="font-family:var(--font-mono); font-size:11.5px;">run #4795</td></tr>
+            <tr class="clickable" data-d="4"><td style="font-family:var(--font-mono); font-weight:700;">DEPOSIT-SHEET-CAM-HIDE</td><td>iOS hides camera caption with keypad open</td><td><span class="chip app">native</span></td><td><span class="chip new">CANDIDATE</span></td><td>1 plan</td><td style="font-family:var(--font-mono); font-size:11.5px;">run #4814</td></tr>
+            <tr class="clickable" data-d="5"><td style="font-family:var(--font-mono); font-weight:700;">LOGIN-KEYCLOAK-SPEED</td><td>Login renders within 2s</td><td><span class="chip app">sso</span></td><td><span class="chip changed">STALE</span></td><td>2 plans</td><td style="font-family:var(--font-mono); font-size:11.5px;">PR #4807</td></tr>
+            <tr class="clickable" data-d="6"><td style="font-family:var(--font-mono); font-weight:700;">ODDS-FORMAT-BRL</td><td>Odds use locale decimal separator</td><td><span class="chip app">bet-client</span></td><td><span class="chip pass">VERIFIED</span></td><td>5 plans</td><td style="font-family:var(--font-mono); font-size:11.5px;">run #4788</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </main>
+  </div>
+
+  <aside class="drawer" id="drawer">
+    <div class="dhead"><b id="dId">SLIP-CONFIRM-GUARDS</b><span class="chip new" id="dSt">CANDIDATE</span><span class="x" id="dX">esc</span></div>
+    <div class="dshot"><div class="mockshot"><div class="bar"></div><div class="grid"><i></i><i class="bad"></i><i></i></div><span class="badge-on-shot fail">step 14</span></div></div>
+    <div class="dsec">
+      <h5>Behavior</h5>
+      <p id="dText">Confirm button stays disabled until the totals API returns a non-empty odds bundle for every selection in the slip. Stakes may change freely; total compounds exactly once per render cycle.</p>
+    </div>
+    <div class="dsec">
+      <h5>Provenance</h5>
+      <div class="kv"><span>Captured by</span><b>Vision Judge · run #4812</b></div>
+      <div class="kv"><span>First seen</span><b>09-19 · 09:38</b></div>
+      <div class="kv"><span>Occurrences</span><b>2 runs</b></div>
+      <div class="kv"><span>Human review</span><b id="dReview">pending</b></div>
+    </div>
+    <div class="dsec">
+      <h5>Used by plans</h5>
+      <p style="font-family: var(--font-mono); font-size: 12px;">checkout-flow-v3 (proposed)</p>
+    </div>
+    <div class="dfoot">
+      <button class="btn approve" id="dPromote">Promote to verified</button>
+      <button class="btn reject" id="dDiscard">Discard</button>
+    </div>
+  </aside>
+</div>
+
+<div class="toast" id="toast"></div>
+<script>
+const NAV = (active) => `
+  <div class="brand"><div class="mark">e2</div><div><b>e2ai</b><span>@admin/e2ai</span></div></div>
+  <nav style="display:flex; flex-direction:column; gap:var(--space-6); flex:1;">
+    <div class="nav-group"><h4>QA Arm</h4>
+      <a class="nav-item" href="#">Command Center</a>
+      <a class="nav-item" href="#">Runs</a>
+      <a class="nav-item" href="#">Reports</a>
+    </div>
+    <div class="nav-group"><h4>Library</h4>
+      <a class="nav-item" href="#">Plans</a>
+      <a class="nav-item" href="#">Approvals <span class="n">2</span></a>
+      <a class="nav-item ${active === 'Behaviors' ? 'active' : ''}" href="#">Behaviors</a>
+    </div>
+    <div class="nav-group"><h4>Admin</h4>
+      <a class="nav-item" href="#">Apps</a>
+    </div>
+  </nav>
+  <div style="font-size:10.5px; color:var(--fg-faint); font-family:var(--font-mono); line-height:1.5;">runs inside<br>@nsxbet/admin shell</div>`;
+document.getElementById('sidebar').innerHTML = NAV('Behaviors');
+document.getElementById('sidebarB').innerHTML = NAV('Behaviors');
+
+document.querySelectorAll('.variant-bar button').forEach(b => b.addEventListener('click', () => {
+  document.querySelectorAll('.variant-bar button').forEach(x => x.classList.remove('on'));
+  document.querySelectorAll('.variant').forEach(x => x.classList.remove('on'));
+  b.classList.add('on'); document.getElementById('v' + b.dataset.v).classList.add('on');
+}));
+
+// filters (variant A)
+document.querySelectorAll('.filters .f').forEach(f => f.addEventListener('click', () => {
+  document.querySelectorAll('.filters .f').forEach(x => x.classList.remove('on'));
+  f.classList.add('on');
+  const k = f.dataset.f;
+  document.querySelectorAll('#corpus .bcard').forEach(c => {
+    c.style.display = (k === 'all' || c.dataset.s === k) ? '' : 'none';
+  });
+}));
+
+// promote/discard (variant A)
+document.querySelectorAll('.promote').forEach(b => b.addEventListener('click', () => {
+  const c = b.closest('.bcard'); c.querySelector('.cand')?.remove();
+  const st = c.querySelector('.meta .chip'); st.className = 'chip pass'; st.textContent = 'VERIFIED';
+  b.outerHTML = '<span class="chip" style="align-self:center; margin-left:2px;">verified by you</span>';
+  toast('Behavior promoted — plans can now reference it');
+}));
+document.querySelectorAll('.discard').forEach(b => b.addEventListener('click', () => {
+  b.closest('.bcard').style.opacity = 0.35; b.closest('.bcard').querySelectorAll('button').forEach(x => x.disabled = true);
+  toast('Candidate discarded');
+}));
+document.querySelectorAll('.requeue').forEach(b => b.addEventListener('click', () => {
+  toast('Queued for re-capture on next deploy');
+}));
+
+// drawer (variant B)
+const drawer = document.getElementById('drawer');
+const DATA = {
+  1: { id: 'SLIP-CONFIRM-GUARDS', st: ['CANDIDATE', 'chip new'], text: 'Confirm button stays disabled until the totals API returns a non-empty odds bundle for every selection in the slip.' },
+  2: { id: 'SLIP-TOTAL-COMPOUNDS', st: ['VERIFIED', 'chip pass'], text: 'Slip total compounds every selection × stake exactly once; updates within 300ms of each change.' },
+  3: { id: 'MATCH-LIVE-BADGE', st: ['VERIFIED', 'chip pass'], text: 'Live matches show the pulsing LIVE badge; odds tick only the changed cell.' },
+  4: { id: 'DEPOSIT-SHEET-CAM-HIDE', st: ['CANDIDATE', 'chip new'], text: 'On iOS the deposit sheet hides the camera caption when the keypad is open; on Android it stays.' },
+  5: { id: 'LOGIN-KEYCLOAK-SPEED', st: ['STALE', 'chip changed'], text: 'Keycloak login page renders within 2s. Source changed in PR #4807 — needs re-capture.' },
+  6: { id: 'ODDS-FORMAT-BRL', st: ['VERIFIED', 'chip pass'], text: 'All odds render in Brazilian format per locale (comma on pt-BR, dot on en).' },
+};
+document.querySelectorAll('#rows .clickable').forEach(r => r.addEventListener('click', () => {
+  const d = DATA[r.dataset.d];
+  document.getElementById('dId').textContent = d.id;
+  const st = document.getElementById('dSt'); st.className = d.st[1]; st.textContent = d.st[0];
+  document.getElementById('dText').textContent = d.text;
+  document.getElementById('dReview').textContent = d.st[0] === 'CANDIDATE' ? 'pending' : d.st[0] === 'STALE' ? 'required (source changed)' : '@yuri · 09-05';
+  drawer.classList.add('open');
+  document.querySelector('.twocol').classList.add('open');
+}));
+document.getElementById('dX').addEventListener('click', () => { drawer.classList.remove('open'); document.querySelector('.twocol').classList.remove('open'); });
+document.getElementById('dPromote').addEventListener('click', () => { toast('Promoted to verified — human is the source of truth'); });
+document.getElementById('dDiscard').addEventListener('click', () => { toast('Candidate discarded'); });
+
+function toast(msg) {
+  const t = document.getElementById('toast');
+  t.textContent = msg; t.classList.add('show');
+  clearTimeout(t._h); t._h = setTimeout(() => t.classList.remove('show'), 2400);
+}
+</script>
+</body>
+</html>

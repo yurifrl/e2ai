@@ -1,0 +1,179 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>006 — Plan Format · e2ai sketches</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;600;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="../themes/default.css">
+<link rel="stylesheet" href="../themes/shared.css">
+<style>
+  .two { display: grid; grid-template-columns: 1fr 1fr; gap: var(--space-5); align-items: start; }
+  .codepane { padding: 0; overflow: hidden; }
+  .codepane .ch { padding: 10px 16px; border-bottom: 1px solid var(--border); font-family: var(--font-mono); font-size: 11.5px; color: var(--fg-muted); background: var(--surface-2); display: flex; justify-content: space-between; }
+  .codepane .ch .path { font-weight: 600; color: var(--fg); }
+  .codepane pre { font-family: var(--font-mono); font-size: 12px; line-height: 1.7; padding: 14px 18px; overflow-x: auto; }
+  .codepane .cm { color: var(--fg-faint); }
+  .codepane .kw { color: var(--primary); font-weight: 600; }
+  .codepane .bid { color: hsl(280 55% 55%); font-weight: 600; }
+  .codepane .str { color: var(--success); }
+  .codepane .sec { color: var(--fg); font-weight: 700; }
+  .spec dl { padding: 0 var(--space-5) var(--space-5); }
+  .spec .row { padding: 12px 0; border-bottom: 1px solid var(--border); }
+  .spec .row:last-child { border-bottom: none; }
+  .spec .row dt { font-family: var(--font-mono); font-size: 12.5px; font-weight: 700; margin-bottom: 4px; }
+  .spec .row dt .req { font-size: 9.5px; text-transform: uppercase; letter-spacing: 0.06em; padding: 2px 6px; border-radius: 3px; margin-left: 8px; vertical-align: 2px; }
+  .spec .row dt .req.y { background: var(--primary-soft); color: var(--primary); }
+  .spec .row dt .req.o { background: var(--surface-3); color: var(--fg-muted); }
+  .spec .row dd { font-size: var(--text-sm); color: var(--fg); line-height: 1.55; max-width: 560px; }
+  .spec .row dd small { color: var(--fg-muted); display: block; margin-top: 3px; }
+  .hownote { padding: var(--space-3) var(--space-4); background: var(--primary-soft); border: 1px solid hsl(214 100% 50% / 0.25); border-radius: var(--radius-sm); font-size: var(--text-sm); margin-bottom: var(--space-5); }
+</style>
+</head>
+<body>
+<div class="variant-bar">
+  <span class="vl">Variant</span>
+  <button data-v="A" class="on">A · Plan File ↔ Arm Reading</button>
+  <button data-v="B">B · Format Spec</button>
+  <span class="note">006 · plan-format · the declarative contract</span>
+</div>
+
+<div id="vA" class="variant on">
+  <div class="shell">
+    <aside class="side" id="sidebar"></aside>
+    <main class="main">
+      <div class="pagehead">
+        <div><h1>Plan format</h1><div class="sub">A test plan is a markdown file. Humans read and approve it; agents execute it.</div></div>
+      </div>
+
+      <div class="hownote"><b>How the arm reads this:</b> frontmatter tells the scheduler <b>when to run</b>. Steps tell the <b>Navigator</b> what to do in plain intent. <span style="font-family:var(--font-mono); font-size:11px; font-weight:700;">judge:</span> lines are what the <b>Vision Judge</b> verifies. <span style="font-family:var(--font-mono); font-size:11px; font-weight:700;">uses:</span> ties steps to the behavior corpus. Nothing here is code — a reviewer approves prose.</div>
+
+      <div class="two">
+        <div class="card codepane">
+          <div class="ch"><span class="path">apps/bet-client/tests/plans/checkout-flow-v3.md</span><span>source of truth</span></div>
+          <pre><span class="cm">---</span>
+<span class="kw">id:</span> <span class="str">checkout-flow-v3</span>
+<span class="kw">app:</span> <span class="str">bet-client</span>
+<span class="kw">title:</span> <span class="str">Checkout flow end-to-end</span>
+<span class="kw">surfaces:</span> [<span class="str">web</span>, <span class="str">ios-simulator</span>, <span class="str">android-emulator</span>]
+<span class="kw">trigger:</span> <span class="str">on-deploy</span>          <span class="cm"># runs on every deploy of bet-client</span>
+<span class="cm">---</span>
+
+<span class="sec"># Purpose</span>
+Build a slip from the match list, compound selections,
+confirm, and reach the confirmation screen.
+Failures report to the PR — never block.
+
+<span class="sec">## Steps</span>
+<span class="sec">1.</span> Navigate to home. Intent: see the live match list.
+   <span class="kw">judge:</span> at least 12 live match cards render.
+   <span class="kw">uses:</span> <span class="bid">MATCH-LIVE-BADGE</span>
+
+<span class="sec">2.</span> Tap first match, add selection to the slip.
+   <span class="kw">judge:</span> slip panel opens with odds <span class="str">2.40</span>.
+   <span class="kw">uses:</span> <span class="bid">SLIP-TOTAL-COMPOUNDS</span>
+
+<span class="sec">14.</span> Submit slip with stake R$50.
+   <span class="kw">judge:</span> confirm stays disabled until totals API
+          returns a non-empty odds bundle.
+   <span class="kw">uses:</span> <span class="bid">SLIP-CONFIRM-GUARDS</span>
+
+<span class="sec">15.</span> On failure: fresh-session diagnostic.
+   <span class="kw">judge:</span> record evidence for the analyst.
+   <span class="cm"># report only — never blocking</span></pre>
+        </div>
+
+        <div class="card codepane">
+          <div class="ch"><span class="path">what each part becomes</span><span>runtime contract</span></div>
+          <pre><span class="cm">frontmatter → scheduler</span>
+  app + trigger  → "run on every bet-client deploy"
+  surfaces       → one execution per surface
+
+<span class="cm">steps → agents</span>
+  numbered text  → Navigator's driving instructions
+                   (plain intent, agent figures out
+                   selectors/taps itself)
+  judge:         → Vision Judge's acceptance check
+                   against screenshots/frames
+  uses:          → assertion anchored in the behavior
+                   corpus (human-approved)
+
+<span class="cm">on verdict</span>
+  pass/fail per step → live HTML report
+  new judge patterns → behavior candidates
+  changed corpus     → plan flagged CHANGED → approval</pre>
+        </div>
+      </div>
+    </main>
+  </div>
+</div>
+
+<div id="vB" class="variant">
+  <div class="shell">
+    <aside class="side" id="sidebarB"></aside>
+    <main class="main">
+      <div class="pagehead">
+        <div><h1>Plan format spec</h1><div class="sub">The whole grammar on one page · same contract the Plan Author writes and you approve</div></div>
+      </div>
+
+      <div class="two">
+        <div class="card spec">
+          <div class="ch" style="padding:10px 16px; border-bottom:1px solid var(--border); font-family:var(--font-mono); font-size:11.5px; background:var(--surface-2);"><span class="path">frontmatter</span><span>scheduler reads</span></div>
+          <dl>
+            <div class="row"><dt>id <span class="req y">required</span></dt><dd>Stable unique identifier, semver-suffixed version (<span style="font-family:var(--font-mono);">checkout-flow-v3</span>). Renaming means a new plan.</dd></div>
+            <div class="row"><dt>app <span class="req y">required</span></dt><dd>Registered app in the arm. Ties the plan to a repo + deploy workflow.</dd></div>
+            <div class="row"><dt>surfaces <span class="req y">required</span></dt><dd><span style="font-family:var(--font-mono);">web</span>, <span style="font-family:var(--font-mono);">ios-simulator</span>, <span style="font-family:var(--font-mono);">android-emulator</span>. Each surface gets its own execution per run.</dd></div>
+            <div class="row"><dt>trigger <span class="req y">required</span></dt><dd><span style="font-family:var(--font-mono);">on-deploy</span> (every deploy) · <span style="font-family:var(--font-mono);">on-demand</span> · <span style="font-family:var(--font-mono);">nightly</span>.</dd></div>
+            <div class="row"><dt>pr-filter <span class="req o">optional</span></dt><dd>Run only when the deploy's PR touches matching paths (<span style="font-family:var(--font-mono);">paths: apps/bet-client/checkout/**</span>).</dd></div>
+            <div class="row"><dt>timeout <span class="req o">optional</span></dt><dd>Per-surface wall-clock budget. Default 10m.</dd></div>
+          </dl>
+        </div>
+
+        <div class="card spec">
+          <div class="ch" style="padding:10px 16px; border-bottom:1px solid var(--border); font-family:var(--font-mono); font-size:11.5px; background:var(--surface-2);"><span class="path">steps</span><span>agents read</span></div>
+          <dl>
+            <div class="row"><dt>N. <intent> <span class="req y">required</span></dt><dd>Plain-language driving instruction for the <b>Navigator</b>. No selectors, no code — the agent resolves UI itself and screenshots every step.</dd></div>
+            <div class="row"><dt>judge: <span class="req y">required on key steps</span></dt><dd>What the <b>Vision Judge</b> must confirm on the frames. Falsifiable statements, not vibes.</dd></div>
+            <div class="row"><dt>uses: <span class="req o">optional</span></dt><dd>Behavior corpus reference(s). Run fails if the referenced behavior is unverified; corpus changes flag the plan CHANGED.</dd></div>
+            <div class="row"><dt>on-failure: <span class="req o">optional</span></dt><dd><span style="font-family:var(--font-mono);">continue</span> (default: stop surface) · <span style="font-family:var(--font-mono);">diagnose</span> (fresh-session evidence for the analyst) · always report-only.</dd></div>
+          </dl>
+          <div style="margin: 0 var(--space-5) var(--space-5); padding: var(--space-4); border-radius: var(--radius-sm); background: var(--warning-soft); border: 1px solid hsl(24 74% 50% / 0.3); font-size: var(--text-sm);">
+            <b>Lifecycle rules:</b> new or changed plans queue for human approval before their first run. Approved version runs on every matching deploy. Corpus staleness demotes affected plans until re-approved.
+          </div>
+        </div>
+      </div>
+    </main>
+  </div>
+</div>
+
+<div class="toast" id="toast"></div>
+<script>
+const NAV = (active) => `
+  <div class="brand"><div class="mark">e2</div><div><b>e2ai</b><span>@admin/e2ai</span></div></div>
+  <nav style="display:flex; flex-direction:column; gap:var(--space-6); flex:1;">
+    <div class="nav-group"><h4>QA Arm</h4>
+      <a class="nav-item" href="#">Command Center</a>
+      <a class="nav-item" href="#">Runs</a>
+      <a class="nav-item" href="#">Reports</a>
+    </div>
+    <div class="nav-group"><h4>Library</h4>
+      <a class="nav-item" href="#">Plans</a>
+      <a class="nav-item" href="#">Approvals <span class="n">2</span></a>
+      <a class="nav-item ${active === 'Plans' ? 'active' : ''}" href="#">Behaviors</a>
+    </div>
+    <div class="nav-group"><h4>Admin</h4>
+      <a class="nav-item" href="#">Apps</a>
+    </div>
+  </nav>
+  <div style="font-size:10.5px; color:var(--fg-faint); font-family:var(--font-mono); line-height:1.5;">runs inside<br>@nsxbet/admin shell</div>`;
+document.getElementById('sidebar').innerHTML = NAV('Plans');
+document.getElementById('sidebarB').innerHTML = NAV('Plans');
+
+document.querySelectorAll('.variant-bar button').forEach(b => b.addEventListener('click', () => {
+  document.querySelectorAll('.variant-bar button').forEach(x => x.classList.remove('on'));
+  document.querySelectorAll('.variant').forEach(x => x.classList.remove('on'));
+  b.classList.add('on'); document.getElementById('v' + b.dataset.v).classList.add('on');
+}));
+</script>
+</body>
+</html>

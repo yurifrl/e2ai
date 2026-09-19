@@ -1,0 +1,291 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>005 — Apps & Onboarding · e2ai sketches</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;600;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="../themes/default.css">
+<link rel="stylesheet" href="../themes/shared.css">
+<style>
+  .apps { display: grid; grid-template-columns: repeat(2, 1fr); gap: var(--space-4); }
+  .appcard { overflow: hidden; }
+  .appcard .head { padding: var(--space-4) var(--space-5); border-bottom: 1px solid var(--border); display: flex; align-items: center; gap: 10px; }
+  .appcard .head b { font-family: var(--font-mono); font-size: var(--text-lg); }
+  .appcard .head .st { margin-left: auto; }
+  .appcard .cfg { padding: var(--space-2) 0; }
+  .appcard .kv { display: flex; justify-content: space-between; align-items: center; padding: 8px var(--space-5); border-bottom: 1px solid var(--border); font-size: var(--text-sm); }
+  .appcard .kv:last-child { border-bottom: none; }
+  .appcard .kv span { color: var(--fg-muted); }
+  .appcard .kv .mono { font-family: var(--font-mono); font-size: 12px; color: var(--fg); }
+  .appcard .foot { padding: var(--space-3) var(--space-5); display: flex; gap: 8px; }
+  .appcard.pending { border-color: hsl(24 74% 50% / 0.4); }
+  .appcard.off { border-style: dashed; opacity: 0.85; }
+
+  /* Variant B — wizard */
+  .wizard { max-width: 640px; margin: 0 auto; }
+  .wizhead { display: flex; align-items: center; gap: var(--space-3); margin-bottom: var(--space-6); }
+  .wizhead .stepnum {
+    width: 30px; height: 30px; border-radius: 50%; display: grid; place-items: center;
+    font-family: var(--font-mono); font-weight: 700; font-size: 12px;
+    background: var(--surface-3); color: var(--fg-muted); flex: none;
+    transition: all 0.2s ease;
+  }
+  .wizhead .stepnum.on { background: var(--primary); color: #fff; }
+  .wizhead .stepnum.done { background: var(--success); color: #fff; }
+  .wizhead .line { height: 2px; flex: 1; background: var(--border); }
+  .wizhead .line.on { background: var(--success); }
+  .wizhead .lbl { font-size: var(--text-xs); color: var(--fg-muted); margin-top: 6px; text-align: center; }
+  .wizstep { display: none; }
+  .wizstep.on { display: block; }
+  .field { margin-bottom: var(--space-4); }
+  .field label { display: block; font-size: var(--text-xs); font-weight: 600; text-transform: uppercase; letter-spacing: 0.06em; color: var(--fg-faint); margin-bottom: 6px; }
+  .field .input { width: 100%; }
+  .surfcards { display: grid; grid-template-columns: repeat(3, 1fr); gap: var(--space-3); }
+  .surfcards .sc { border: 1px solid var(--border); border-radius: var(--radius); padding: var(--space-3); cursor: pointer; transition: all 0.15s ease; }
+  .surfcards .sc.on { border-color: var(--primary); background: var(--primary-soft); box-shadow: var(--shadow-sm); }
+  .surfcards .sc b { font-size: var(--text-sm); display: block; margin-bottom: 4px; }
+  .surfcards .sc span { font-size: var(--text-xs); color: var(--fg-muted); line-height: 1.4; display: block; }
+  .radios .r { display: flex; gap: 10px; padding: 12px var(--space-4); border: 1px solid var(--border); border-radius: var(--radius-sm); margin-bottom: 10px; cursor: pointer; align-items: center; }
+  .radios .r.on { border-color: var(--primary); background: var(--primary-soft); }
+  .radios .r input { accent-color: var(--primary); }
+  .radios .r p { font-size: var(--text-sm); }
+  .radios .r p small { display: block; color: var(--fg-muted); font-size: var(--text-xs); margin-top: 2px; }
+  .wizfoot { display: flex; gap: 10px; justify-content: flex-end; margin-top: var(--space-6); }
+  .reviewlist .rv { display: flex; justify-content: space-between; padding: 9px 0; border-bottom: 1px solid var(--border); font-size: var(--text-sm); }
+  .reviewlist .rv:last-child { border-bottom: none; }
+  .reviewlist .rv b { font-weight: 600; }
+  .success { text-align: center; padding: var(--space-12) var(--space-6); }
+  .success .ring { width: 64px; height: 64px; border-radius: 50%; background: var(--success-soft); display: grid; place-items: center; margin: 0 auto var(--space-4); }
+  .success .ring i { width: 28px; height: 14px; border-left: 4px solid var(--success); border-bottom: 4px solid var(--success); transform: rotate(-45deg) translate(2px, -4px); }
+  .success h3 { font-size: var(--text-xl); margin-bottom: 6px; }
+  .success p { color: var(--fg-muted); font-size: var(--text-sm); max-width: 420px; margin: 0 auto; }
+</style>
+</head>
+<body>
+<div class="variant-bar">
+  <span class="vl">Variant</span>
+  <button data-v="A" class="on">A · Registry Cards</button>
+  <button data-v="B">B · Onboarding Wizard</button>
+  <span class="note">005 · apps-onboarding</span>
+</div>
+
+<div id="vA" class="variant on">
+  <div class="shell">
+    <aside class="side" id="sidebar"></aside>
+    <main class="main">
+      <div class="pagehead">
+        <div><h1>Apps</h1><div class="sub">Applications the QA arm guards · any app, wired by config</div></div>
+        <button class="btn primary sm" id="wOpen">+ Connect app</button>
+      </div>
+
+      <div class="apps">
+        <div class="card appcard">
+          <div class="head"><b>bet-client</b><span class="chip pass st"><span class="dot"></span>connected</span></div>
+          <div class="cfg">
+            <div class="kv"><span>Repo</span><span class="mono">NSXBet/bet-app</span></div>
+            <div class="kv"><span>Deploy trigger</span><span class="mono">workflow_run · deploy-web</span></div>
+            <div class="kv"><span>Surfaces</span><span><span class="chip" style="margin-right:4px;">web</span><span class="chip" style="margin-right:4px;">iOS sim</span><span class="chip">Android emu</span></span></div>
+            <div class="kv"><span>Plan source</span><span class="mono">apps/bet-client/tests/plans</span></div>
+            <div class="kv"><span>Behaviors</span><span><b style="color:var(--success);">48</b> verified · 4 candidates</span></div>
+            <div class="kv"><span>Last deploy run</span><span class="mono">#4812 · 09:38 · report only</span></div>
+          </div>
+          <div class="foot"><button class="btn sm">Edit config</button><button class="btn sm">Run all plans</button><a class="btn sm" href="#">Open report</a></div>
+        </div>
+
+        <div class="card appcard">
+          <div class="head"><b>native</b><span class="chip pass st"><span class="dot"></span>connected</span></div>
+          <div class="cfg">
+            <div class="kv"><span>Repo</span><span class="mono">NSXBet/bet-app (monorepo)</span></div>
+            <div class="kv"><span>Deploy trigger</span><span class="mono">workflow_run · deploy-native</span></div>
+            <div class="kv"><span>Surfaces</span><span><span class="chip" style="margin-right:4px;">iOS sim</span><span class="chip">Android emu</span></span></div>
+            <div class="kv"><span>Plan source</span><span class="mono">plans-repo/bet-app/native</span></div>
+            <div class="kv"><span>Behaviors</span><span><b style="color:var(--success);">6</b> verified · 1 candidate</span></div>
+            <div class="kv"><span>Last deploy run</span><span class="mono">#4814 · 09:41 · live now</span></div>
+          </div>
+          <div class="foot"><button class="btn sm">Edit config</button><button class="btn sm">Run all plans</button><a class="btn sm" href="#">Open report</a></div>
+        </div>
+
+        <div class="card appcard pending">
+          <div class="head"><b>sso</b><span class="chip flaky st"><span class="dot"></span>webhook missing</span></div>
+          <div class="cfg">
+            <div class="kv"><span>Repo</span><span class="mono">NSXBet/bet-app (monorepo)</span></div>
+            <div class="kv"><span>Deploy trigger</span><span class="warning" style="color:var(--warning); font-weight:600;">not receiving events</span></div>
+            <div class="kv"><span>Surfaces</span><span><span class="chip">web</span></span></div>
+            <div class="kv"><span>Plan source</span><span class="mono">apps/sso/tests/plans</span></div>
+            <div class="kv"><span>Behaviors</span><span><b style="color:var(--success);">2</b> verified · 1 stale</span></div>
+            <div class="kv"><span>Last deploy run</span><span class="mono">#4808 · 09:30</span></div>
+          </div>
+          <div class="foot"><button class="btn primary sm whfix">Add webhook to repo</button><button class="btn sm">Edit config</button></div>
+        </div>
+
+        <div class="card appcard off">
+          <div class="head"><b>rules</b><span class="chip st" style="background:var(--surface-3); color:var(--fg-muted);"><span class="dot" style="background:var(--fg-faint);"></span>not connected</span></div>
+          <div class="cfg">
+            <div class="kv"><span>Repo</span><span class="mono">—</span></div>
+            <div class="kv"><span>Deploy trigger</span><span class="mono">—</span></div>
+            <div class="kv"><span>Surfaces</span><span class="mono">—</span></div>
+            <div class="kv"><span>Plan source</span><span class="mono">—</span></div>
+          </div>
+          <div class="foot"><button class="btn primary sm" id="wOpen2">Connect app</button></div>
+        </div>
+      </div>
+    </main>
+  </div>
+</div>
+
+<div id="vB" class="variant">
+  <div class="shell">
+    <aside class="side" id="sidebarB"></aside>
+    <main class="main">
+      <div class="pagehead">
+        <div><h1>Connect an app</h1><div class="sub">Any app with deploys and a repo can join the arm · 4 steps</div></div>
+      </div>
+
+      <div class="wizard card" style="padding: var(--space-8);">
+        <div class="wizhead">
+          <div><div class="stepnum on" data-s="1">1</div><div class="lbl">App</div></div>
+          <div class="line"></div>
+          <div><div class="stepnum" data-s="2">2</div><div class="lbl">Surfaces</div></div>
+          <div class="line"></div>
+          <div><div class="stepnum" data-s="3">3</div><div class="lbl">Plans</div></div>
+          <div class="line"></div>
+          <div><div class="stepnum" data-s="4">4</div><div class="lbl">Review</div></div>
+        </div>
+
+        <div class="wizstep on" data-s="1">
+          <div class="field"><label>Repository</label><input class="input" id="fRepo" value="NSXBet/rules" placeholder="owner/repo"></div>
+          <div class="field"><label>App name (module label)</label><input class="input" id="fName" value="rules"></div>
+          <div class="field"><label>Deploy workflow to listen for</label><input class="input" id="fWf" value="deploy-rules" placeholder="workflow name"></div>
+          <p style="font-size: var(--text-xs); color: var(--fg-muted); margin-top: 8px;">The arm subscribes to this workflow's completion. Every successful deploy starts the related plans.</p>
+        </div>
+
+        <div class="wizstep" data-s="2">
+          <div class="field"><label>Which surfaces should the arm guard?</label>
+            <div class="surfcards">
+              <div class="sc on" data-sur="web"><b>Web</b><span>Chromium · Navigator drives the browser, Judge reviews frames.</span></div>
+              <div class="sc" data-sur="ios"><b>iOS simulator</b><span>Xcode sim · tap/screenshot via idb; WebView content included.</span></div>
+              <div class="sc" data-sur="android"><b>Android emulator</b><span>adb + screencap · WebView and native screens.</span></div>
+            </div>
+          </div>
+          <p style="font-size: var(--text-xs); color: var(--fg-muted);">Plans declare which surfaces they run on; the arm runs each on every matching deploy.</p>
+        </div>
+
+        <div class="wizstep" data-s="3">
+          <div class="field radios">
+            <label style="display:block; font-size:var(--text-xs); font-weight:600; text-transform:uppercase; letter-spacing:0.06em; color:var(--fg-faint); margin-bottom:10px;">Where do test plans live?</label>
+            <div class="r on"><input type="radio" name="plansrc" checked><p><b>In the app repo</b><small>plans ship with the code they guard — e.g. apps/rules/tests/plans/*.md</small></p></div>
+            <div class="r"><input type="radio" name="plansrc"><p><b>In a dedicated plans repo</b><small>shared arm-owned repo, referenced by path — e.g. plans-repo/rules/*.md</small></p></div>
+          </div>
+          <div class="field"><label>Plans path</label><input class="input" value="apps/rules/tests/plans" id="fPath"></div>
+        </div>
+
+        <div class="wizstep" data-s="4">
+          <div class="reviewlist" id="rvList">
+            <div class="rv"><span>Repository</span><b id="rvRepo">NSXBet/rules</b></div>
+            <div class="rv"><span>App name</span><b id="rvName">rules</b></div>
+            <div class="rv"><span>Deploy workflow</span><b id="rvWf">deploy-rules</b></div>
+            <div class="rv"><span>Surfaces</span><b id="rvSurf">web</b></div>
+            <div class="rv"><span>Plan source</span><b id="rvSrc">app repo · apps/rules/tests/plans</b></div>
+          </div>
+          <p style="font-size: var(--text-xs); color: var(--fg-muted); margin-top: var(--space-4);">The webhook will be registered with a scoped token from 1Password. No deploy is triggered during onboarding.</p>
+        </div>
+
+        <div class="wizstep" data-s="5">
+          <div class="success">
+            <div class="ring"><i></i></div>
+            <h3>rules joined the arm</h3>
+            <p>Webhook registered. The arm will report on every deploy of <b style="font-family:var(--font-mono);">deploy-rules</b>. Add your first plan draft next — or let the Plan Author read the last PRs and propose one.</p>
+            <div style="display:flex; gap:10px; justify-content:center; margin-top: var(--space-6);">
+              <button class="btn">Add first plan</button>
+              <button class="btn primary" id="wDone2">Open app page</button>
+            </div>
+          </div>
+        </div>
+
+        <div class="wizfoot">
+          <button class="btn" id="wBack" disabled>Back</button>
+          <button class="btn primary" id="wNext">Next</button>
+        </div>
+      </div>
+    </main>
+  </div>
+</div>
+
+<div class="toast" id="toast"></div>
+<script>
+const NAV = (active) => `
+  <div class="brand"><div class="mark">e2</div><div><b>e2ai</b><span>@admin/e2ai</span></div></div>
+  <nav style="display:flex; flex-direction:column; gap:var(--space-6); flex:1;">
+    <div class="nav-group"><h4>QA Arm</h4>
+      <a class="nav-item" href="#">Command Center</a>
+      <a class="nav-item" href="#">Runs</a>
+      <a class="nav-item" href="#">Reports</a>
+    </div>
+    <div class="nav-group"><h4>Library</h4>
+      <a class="nav-item" href="#">Plans</a>
+      <a class="nav-item" href="#">Approvals <span class="n">2</span></a>
+      <a class="nav-item" href="#">Behaviors</a>
+    </div>
+    <div class="nav-group"><h4>Admin</h4>
+      <a class="nav-item ${active === 'Apps' ? 'active' : ''}" href="#">Apps</a>
+    </div>
+  </nav>
+  <div style="font-size:10.5px; color:var(--fg-faint); font-family:var(--font-mono); line-height:1.5;">runs inside<br>@nsxbet/admin shell</div>`;
+document.getElementById('sidebar').innerHTML = NAV('Apps');
+document.getElementById('sidebarB').innerHTML = NAV('Apps');
+
+document.querySelectorAll('.variant-bar button').forEach(b => b.addEventListener('click', () => {
+  document.querySelectorAll('.variant-bar button').forEach(x => x.classList.remove('on'));
+  document.querySelectorAll('.variant').forEach(x => x.classList.remove('on'));
+  b.classList.add('on'); document.getElementById('v' + b.dataset.v).classList.add('on');
+}));
+
+// webhook fix toast (variant A)
+document.querySelectorAll('.whfix').forEach(b => b.addEventListener('click', () => { toast('Webhook registered with scoped 1Password token'); }));
+document.querySelectorAll('#wOpen, #wOpen2').forEach(b => b.addEventListener('click', () => {
+  document.querySelector('#vA button[data-v="B"]').click();
+  toast('Opening onboarding wizard (variant B)');
+}));
+
+// wizard (variant B)
+let step = 1, maxStep = 5;
+const surfSel = new Set(['web']);
+document.querySelectorAll('.surfcards .sc').forEach(sc => sc.addEventListener('click', () => {
+  const k = sc.dataset.sur;
+  sc.classList.toggle('on');
+  sc.classList.contains('on') ? surfSel.add(k) : surfSel.delete(k);
+}));
+document.querySelectorAll('.radios .r').forEach(r => r.addEventListener('click', () => {
+  document.querySelectorAll('.radios .r').forEach(x => x.classList.remove('on'));
+  r.classList.add('on'); r.querySelector('input').checked = true;
+  const p = document.getElementById('fPath');
+  p.value = r.textContent.includes('app repo') ? 'apps/rules/tests/plans' : 'plans-repo/rules';
+}));
+
+function render() {
+  document.querySelectorAll('.wizhead .stepnum').forEach(n => {
+    const s = +n.dataset.s;
+    n.classList.toggle('on', s === step);
+    n.classList.toggle('done', s < step || (s === 4 && step === 5));
+  });
+  document.querySelectorAll('.wizstep').forEach(w => w.classList.toggle('on', +w.dataset.s === step));
+  document.getElementById('wBack').disabled = step === 1;
+  const next = document.getElementById('wNext');
+  next.textContent = step === 4 ? 'Connect app' : step === 5 ? 'Done' : 'Next';
+  if (step === 4) {
+    document.getElementById('rvRepo').textContent = document.getElementById('fRepo').value;
+    document.getElementById('rvName').textContent = document.getElementById('fName').value;
+    document.getElementById('rvWf').textContent = document.getElementById('fWf').value;
+    document.getElementById('rvSurf').textContent = [...surfSel].join(', ') || '—';
+    document.getElementById('rvSrc').textContent = document.querySelector('.radios .r.on').textContent.includes('app repo') ? 'app repo · ' + document.getElementById('fPath').value : 'plans repo · ' + document.getElementById('fPath').value;
+  }
+}
+document.getElementById('wNext').addEventListener('click', () => {
+  if (step < maxStep) { step++; render(); if (step === 5) toast('Webhook registered — rules is now guarded'); }
+});
+document.getElementById('wBack').addEventListener('click', () => { if (step > 1) { step--; render(); } });
+render();
+</script>
+</body>
+</html>

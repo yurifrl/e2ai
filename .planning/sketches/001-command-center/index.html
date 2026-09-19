@@ -1,0 +1,343 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>001 — Command Center · e2ai sketches</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;600;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="../themes/default.css">
+<link rel="stylesheet" href="../themes/shared.css">
+<style>
+  .kpis { display: grid; grid-template-columns: repeat(4, 1fr); gap: var(--space-4); margin-bottom: var(--space-6); }
+  .kpi { padding: var(--space-4); }
+  .kpi .label { font-size: var(--text-xs); text-transform: uppercase; letter-spacing: 0.07em; color: var(--fg-faint); font-weight: 600; }
+  .kpi .val { font-size: 26px; font-weight: 700; letter-spacing: -0.5px; margin-top: 4px; }
+  .kpi .val small { font-size: 13px; font-weight: 600; color: var(--fg-muted); margin-left: 3px; }
+  .kpi .trend { font-size: var(--text-xs); margin-top: 6px; font-family: var(--font-mono); }
+  .kpi .trend.up { color: var(--success); } .kpi .trend.warn { color: var(--warning); }
+  .kpi.warn .val { color: var(--warning); }
+
+  .feedwrap { display: grid; grid-template-columns: 1fr 320px; gap: var(--space-6); align-items: start; }
+  .feed .row {
+    display: grid; grid-template-columns: 58px 1fr 150px 24px; gap: var(--space-3);
+    align-items: center; padding: var(--space-3) var(--space-4); border-bottom: 1px solid var(--border); cursor: pointer;
+    transition: background 0.12s ease;
+  }
+  .feed .row:hover { background: var(--surface-2); }
+  .feed .row:last-child { border-bottom: none; }
+  .feed .row .when { font-family: var(--font-mono); font-size: var(--text-xs); color: var(--fg-muted); }
+  .feed .row .what { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; min-width: 0; }
+  .feed .row .what .pr { font-family: var(--font-mono); font-size: 12.5px; font-weight: 600; color: var(--fg); }
+  .feed .row .what .plan { font-size: var(--text-xs); color: var(--fg-muted); }
+  .feed .row .thumbs { display: flex; gap: 5px; justify-content: flex-end; }
+  .feed .row .thumbs .mockshot { width: 62px; height: 42px; flex: none; }
+  .feed .row .chev { color: var(--fg-faint); transition: transform 0.15s ease; font-family: var(--font-mono); }
+  .feed .row.open .chev { transform: rotate(90deg); }
+  .feed .detail {
+    display: none; padding: 0 var(--space-4) var(--space-4) 76px; border-bottom: 1px solid var(--border);
+    background: hsl(214 100% 50% / 0.02);
+  }
+  .feed .row.open + .detail { display: block; }
+  .feed .detail .agentline { display: flex; gap: 8px; align-items: baseline; margin-top: 10px; }
+  .feed .detail p { font-size: var(--text-sm); color: var(--fg); padding-top: 2px; max-width: 640px; }
+  .feed .row.new { animation: slidein 0.4s ease; background: var(--primary-soft); }
+  @keyframes slidein { from { transform: translateY(-10px); opacity: 0; } to { transform: none; opacity: 1; } }
+
+  .arm .agentrow { display: flex; align-items: center; gap: 10px; padding: 10px var(--space-4); border-bottom: 1px solid var(--border); }
+  .arm .agentrow:last-child { border-bottom: none; }
+  .arm .st { width: 8px; height: 8px; border-radius: 50%; flex: none; }
+  .arm .st.busy { background: var(--primary); box-shadow: 0 0 0 3px var(--primary-soft); animation: pulse 1.4s infinite; }
+  .arm .st.idle { background: hsl(220 12% 80%); }
+  .arm .st.watch { background: var(--success); }
+  .arm .who b { font-size: var(--text-sm); display: block; }
+  .arm .who span { font-size: var(--text-xs); color: var(--fg-muted); }
+  .arm .now { margin-left: auto; font-size: var(--text-xs); color: var(--fg-faint); font-family: var(--font-mono); text-align: right; max-width: 110px; }
+  .railcard h3 { font-size: var(--text-sm); font-weight: 700; padding: var(--space-3) var(--space-4); border-bottom: 1px solid var(--border); }
+  .railcard { margin-bottom: var(--space-4); }
+
+  /* Variant B — board */
+  .queue { display: flex; gap: var(--space-3); margin-bottom: var(--space-6); flex-wrap: wrap; }
+  .queue .qcard { flex: 1 1 300px; padding: var(--space-4); border-left: 3px solid var(--warning); display: flex; gap: var(--space-3); align-items: center; }
+  .queue .qcard .qinfo { flex: 1; min-width: 0; }
+  .queue .qcard .qinfo b { font-size: var(--text-sm); display: block; }
+  .queue .qcard .qinfo span { font-size: var(--text-xs); color: var(--fg-muted); }
+  .apps { display: grid; grid-template-columns: repeat(2, 1fr); gap: var(--space-4); }
+  .appcard { padding: 0; overflow: hidden; }
+  .appcard .head { padding: var(--space-4); display: flex; align-items: center; justify-content: space-between; border-bottom: 1px solid var(--border); }
+  .appcard .head b { font-family: var(--font-mono); font-size: var(--text-base); }
+  .appcard .body { padding: var(--space-3) var(--space-4); }
+  .appcard .health { height: 6px; border-radius: 3px; background: var(--surface-3); overflow: hidden; display: flex; margin-bottom: var(--space-3); }
+  .appcard .health i { display: block; height: 100%; }
+  .appcard .runline { display: flex; align-items: center; gap: 8px; font-size: var(--text-xs); color: var(--fg-muted); padding: 4px 0; font-family: var(--font-mono); }
+  .appcard .runline .planname { font-family: var(--font-sans); color: var(--fg); font-weight: 500; flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .appcard .foot { padding: var(--space-2) var(--space-4) var(--space-3); }
+</style>
+</head>
+<body>
+<div class="variant-bar">
+  <span class="vl">Variant</span>
+  <button data-v="A" class="on">A · Live Feed</button>
+  <button data-v="B">B · App Board</button>
+  <span class="note">001 · command-center</span>
+</div>
+
+<div id="vA" class="variant on">
+  <div class="shell">
+    <aside class="side" id="sidebar"></aside>
+    <main class="main">
+      <div class="pagehead">
+        <div>
+          <h1>Command Center</h1>
+          <div class="sub">The QA arm, always reporting. Never blocking.</div>
+        </div>
+        <div style="display:flex; gap:10px; align-items:center;">
+          <button class="chip app" data-filter="all">All apps</button>
+          <button class="chip" data-filter="bet-client">bet-client</button>
+          <button class="chip" data-filter="native">native</button>
+          <button class="chip" data-filter="sso">sso</button>
+          <button class="btn primary sm" id="tick">+ Simulate tick</button>
+        </div>
+      </div>
+
+      <div class="kpis">
+        <div class="card kpi"><div class="label">Runs today</div><div class="val" id="runsToday">12</div><div class="trend up">+4 vs yesterday</div></div>
+        <div class="card kpi"><div class="label">Pass rate</div><div class="val" id="passRate">87<small>%</small></div><div class="trend up">+2.1pts</div></div>
+        <div class="card kpi warn"><div class="label">Flaky suspects</div><div class="val">3</div><div class="trend warn">checkout-flow-v3 x2</div></div>
+        <div class="card kpi warn"><div class="label">Pending approvals</div><div class="val">2</div><div class="trend warn">1 new · 1 changed</div></div>
+      </div>
+
+      <div class="feedwrap">
+        <div class="card feed" id="feed">
+          <div class="row" data-app="native" data-detail="1">
+            <div class="when">09:41:08</div>
+            <div class="what"><span class="chip live"><span class="dot"></span>LIVE</span><span class="pr">native · #4814</span><span class="plan">deposit-sheet-v2 · iOS sim</span></div>
+            <div class="thumbs"><div class="mockshot phone"><div class="bar"></div><div class="grid"><i></i><i class="hl"></i></div><div class="tabbar"><i class="on"></i><i></i><i></i></div></div><div class="mockshot phone"><div class="bar"></div><div class="grid"><i class="hl"></i><i></i></div></div></div>
+            <div class="chev">></div>
+          </div>
+          <div class="detail">
+            <div class="agentline"><span class="agent-tag navigator">Navigator</span><p>Sheet opened after tapping Deposit on the wallet tab. Camera caption hidden as expected on iOS 17.</p></div>
+            <div class="agentline"><span class="agent-tag judge">Vision Judge</span><p>Amount keypad renders 6 digits, grouped. No clipped labels at 390x844.</p></div>
+          </div>
+
+          <div class="row" data-app="bet-client" data-detail="1">
+            <div class="when">09:38:52</div>
+            <div class="what"><span class="chip fail"><span class="dot"></span>FAIL</span><span class="pr">bet-client · #4812</span><span class="plan">checkout-flow-v3 · web</span></div>
+            <div class="thumbs"><div class="mockshot"><div class="bar"></div><div class="grid"><i></i><i class="bad"></i><i class="bad"></i></div><span class="badge-on-shot fail">fail @ step 14</span></div><div class="mockshot"><div class="bar"></div><div class="grid"><i class="bad"></i><i></i><i></i></div></div></div>
+            <div class="chev">></div>
+          </div>
+          <div class="detail">
+            <div class="agentline"><span class="agent-tag navigator">Navigator</span><p>Step 14: submitted slip with 3 selections, stake R$50. Slip panel did not advance to confirmation.</p></div>
+            <div class="agentline"><span class="agent-tag judge">Vision Judge</span><p><b>What went wrong:</b> total row shows "50.00" but the confirm button remained disabled after 4s. Suspect totals api returned 200 but empty odds bundle — matches behavior SLIP-TOTAL-COMPOUNDS expectation.</p></div>
+            <div class="agentline"><span class="agent-tag analyst">Analyst</span><p>First failure on this deploy; run #4811 on same commit passed. Flagged non-blocking, report only.</p></div>
+          </div>
+
+          <div class="row" data-app="bet-client" data-detail="1">
+            <div class="when">09:36:17</div>
+            <div class="what"><span class="chip pass"><span class="dot"></span>PASS</span><span class="pr">bet-client · #4811</span><span class="plan">checkout-flow-v3 · web+iOS+Android</span></div>
+            <div class="thumbs"><div class="mockshot"><div class="bar"></div><div class="grid"><i class="hl"></i><i></i><i></i></div></div><div class="mockshot phone"><div class="bar"></div><div class="grid"><i></i><i></i></div><div class="tabbar"><i class="on"></i><i></i><i></i></div></div></div>
+            <div class="chev">></div>
+          </div>
+          <div class="detail">
+            <div class="agentline"><span class="agent-tag judge">Vision Judge</span><p>23 steps verified across 3 surfaces. Slip totals, bet-count badge and odds format all match corpus. 1 slow step (sso redirect 4.2s) noted, not a failure.</p></div>
+          </div>
+
+          <div class="row" data-app="sso" data-detail="1">
+            <div class="when">09:30:03</div>
+            <div class="what"><span class="chip flaky"><span class="dot"></span>FLAKY</span><span class="pr">bet-client · #4810</span><span class="plan">login-session-v1 · web</span></div>
+            <div class="thumbs"><div class="mockshot"><div class="bar"></div><div class="grid"><i></i><i class="hl"></i><i></i></div></div></div>
+            <div class="chev">></div>
+          </div>
+          <div class="detail">
+            <div class="agentline"><span class="agent-tag analyst">Flakiness Analyst</span><p>Keycloak login page timed out at step 2 on attempt 1, passed attempt 2. Third flake on this page this week — quarantine proposal drafted, see Behaviors.</p></div>
+          </div>
+
+          <div class="row" data-app="bet-client">
+            <div class="when">09:22:40</div>
+            <div class="what"><span class="chip pass"><span class="dot"></span>PASS</span><span class="pr">bet-client · #4809</span><span class="plan">match-list-v2 · web</span></div>
+            <div class="thumbs"><div class="mockshot"><div class="bar"></div><div class="grid"><i class="hl"></i><i></i><i></i></div></div></div>
+            <div class="chev">></div>
+          </div>
+        </div>
+
+        <div>
+          <div class="card arm railcard">
+            <h3>The Arm — agents online</h3>
+            <div class="agentrow"><span class="st busy"></span><div class="who"><b>Navigator</b><span>driving bet-client web</span></div><div class="now">checkout-flow-v3<br>step 15/23</div></div>
+            <div class="agentrow"><span class="st watch"></span><div class="who"><b>Vision Judge</b><span>reviewing step 12 frames</span></div><div class="now">SLIP-TOTAL<br>verified</div></div>
+            <div class="agentrow"><span class="st busy"></span><div class="who"><b>Plan Author</b><span>drafting plan from PR #4819</span></div><div class="now">withdrawal-flow<br>new plan</div></div>
+            <div class="agentrow"><span class="st idle"></span><div class="who"><b>Edge-case Hunter</b><span>idle · last sweep 2h ago</span></div><div class="now">—</div></div>
+            <div class="agentrow"><span class="st watch"></span><div class="who"><b>Flakiness Analyst</b><span>watching sso timeouts</span></div><div class="now">3 signals<br>quarantine prop.</div></div>
+          </div>
+          <div class="card railcard">
+            <h3>Latest reports</h3>
+            <div style="padding: 10px var(--space-4);">
+              <div class="runline" style="display:flex; gap:8px; align-items:center; padding:5px 0; font-size:var(--text-xs);"><span class="chip fail" style="flex:none;">FAIL</span><a href="#">checkout-flow-v3 · #4812</a></div>
+              <div class="runline" style="display:flex; gap:8px; align-items:center; padding:5px 0; font-size:var(--text-xs);"><span class="chip pass" style="flex:none;">PASS</span><a href="#">checkout-flow-v3 · #4811</a></div>
+              <div class="runline" style="display:flex; gap:8px; align-items:center; padding:5px 0; font-size:var(--text-xs);"><span class="chip flaky" style="flex:none;">FLAKY</span><a href="#">login-session-v1 · #4810</a></div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </main>
+  </div>
+</div>
+
+<div id="vB" class="variant">
+  <div class="shell">
+    <aside class="side" id="sidebarB"></aside>
+    <main class="main">
+      <div class="pagehead">
+        <div><h1>Command Center</h1><div class="sub">App board · grouped by application</div></div>
+      </div>
+
+      <div class="queue">
+        <div class="card qcard">
+          <div class="qinfo"><b>withdrawal-flow-v1</b><span>bet-client · NEW plan · drafted by Plan Author from PR #4819</span></div>
+          <button class="btn approve sm q-approve">Approve</button>
+          <button class="btn reject sm q-reject">Reject</button>
+        </div>
+        <div class="card qcard">
+          <div class="qinfo"><b>checkout-flow-v3</b><span>bet-client · CHANGED · PR #4812 touched slip totals</span></div>
+          <button class="btn approve sm q-approve">Approve</button>
+          <button class="btn reject sm q-reject">Reject</button>
+        </div>
+      </div>
+
+      <div class="apps">
+        <div class="card appcard">
+          <div class="head"><b>bet-client</b><span class="chip pass"><span class="dot"></span>healthy</span></div>
+          <div class="body">
+            <div class="health"><i style="width:82%; background:var(--success);"></i><i style="width:9%; background:var(--warning);"></i><i style="width:9%; background:var(--danger);"></i></div>
+            <div class="runline"><span class="chip pass" style="flex:none;">PASS</span><span class="planname">checkout-flow-v3 · 3 surfaces</span><span>09:36</span></div>
+            <div class="runline"><span class="chip fail" style="flex:none;">FAIL</span><span class="planname">checkout-flow-v3 · web</span><span>09:38</span></div>
+            <div class="runline"><span class="chip pass" style="flex:none;">PASS</span><span class="planname">match-list-v2 · web</span><span>09:22</span></div>
+          </div>
+          <div class="foot"><a href="#" class="btn sm">Open app report</a></div>
+        </div>
+        <div class="card appcard">
+          <div class="head"><b>native</b><span class="chip pass"><span class="dot"></span>healthy</span></div>
+          <div class="body">
+            <div class="health"><i style="width:91%; background:var(--success);"></i><i style="width:9%; background:var(--warning);"></i></div>
+            <div class="runline"><span class="chip live" style="flex:none;"><span class="dot"></span>LIVE</span><span class="planname">deposit-sheet-v2 · iOS sim</span><span>09:41</span></div>
+            <div class="runline"><span class="chip pass" style="flex:none;">PASS</span><span class="planname">bet-slip-v1 · Android emu</span><span>09:02</span></div>
+            <div class="runline"><span class="chip pass" style="flex:none;">PASS</span><span class="planname">deposit-sheet-v2 · both</span><span>08:47</span></div>
+          </div>
+          <div class="foot"><a href="#" class="btn sm">Open app report</a></div>
+        </div>
+        <div class="card appcard">
+          <div class="head"><b>sso</b><span class="chip flaky"><span class="dot"></span>flaky</span></div>
+          <div class="body">
+            <div class="health"><i style="width:70%; background:var(--success);"></i><i style="width:30%; background:var(--warning);"></i></div>
+            <div class="runline"><span class="chip flaky" style="flex:none;">FLAKY</span><span class="planname">login-session-v1 · web</span><span>09:30</span></div>
+            <div class="runline"><span class="chip pass" style="flex:none;">PASS</span><span class="planname">login-session-v1 · web</span><span>08:58</span></div>
+            <div class="runline"><span class="chip pass" style="flex:none;">PASS</span><span class="planname">sso-redirect-v1 · web</span><span>08:31</span></div>
+          </div>
+          <div class="foot"><a href="#" class="btn sm">Open app report</a></div>
+        </div>
+        <div class="card appcard">
+          <div class="head"><b>rules</b><span class="chip" style="background:var(--surface-3); color:var(--fg-muted);"><span class="dot" style="background:var(--fg-faint);"></span>quiet</span></div>
+          <div class="body">
+            <div class="health"><i style="width:100%; background:var(--success);"></i></div>
+            <div class="runline"><span class="chip pass" style="flex:none;">PASS</span><span class="planname">rules-viewer-v1 · web</span><span>yest 22:10</span></div>
+            <div class="runline"><span class="chip pass" style="flex:none;">PASS</span><span class="planname">rules-viewer-v1 · web</span><span>yest 19:44</span></div>
+            <div class="runline" style="color:var(--fg-faint);">no deploys since yesterday</div>
+          </div>
+          <div class="foot"><a href="#" class="btn sm">Open app report</a></div>
+        </div>
+      </div>
+    </main>
+  </div>
+</div>
+
+<div class="toast" id="toast"></div>
+<script>
+// sidebar (both variants share nav)
+const NAV = `
+  <div class="brand"><div class="mark">e2</div><div><b>e2ai</b><span>@admin/e2ai</span></div></div>
+  <nav style="display:flex; flex-direction:column; gap:var(--space-6); flex:1;">
+    <div class="nav-group"><h4>QA Arm</h4>
+      <a class="nav-item active" href="#">Command Center</a>
+      <a class="nav-item" href="#">Runs</a>
+      <a class="nav-item" href="#">Reports</a>
+    </div>
+    <div class="nav-group"><h4>Library</h4>
+      <a class="nav-item" href="#">Plans</a>
+      <a class="nav-item" href="#">Approvals <span class="n">2</span></a>
+      <a class="nav-item" href="#">Behaviors</a>
+    </div>
+    <div class="nav-group"><h4>Admin</h4>
+      <a class="nav-item" href="#">Apps</a>
+    </div>
+  </nav>
+  <div style="font-size:10.5px; color:var(--fg-faint); font-family:var(--font-mono); line-height:1.5;">runs inside<br>@nsxbet/admin shell</div>`;
+document.getElementById('sidebar').innerHTML = NAV;
+document.getElementById('sidebarB').innerHTML = NAV;
+
+// variant tabs
+document.querySelectorAll('.variant-bar button').forEach(b => b.addEventListener('click', () => {
+  document.querySelectorAll('.variant-bar button').forEach(x => x.classList.remove('on'));
+  document.querySelectorAll('.variant').forEach(x => x.classList.remove('on'));
+  b.classList.add('on'); document.getElementById('v' + b.dataset.v).classList.add('on');
+}));
+
+// feed filters
+let curFilter = 'all';
+document.querySelectorAll('[data-filter]').forEach(c => c.addEventListener('click', () => {
+  document.querySelectorAll('[data-filter]').forEach(x => x.classList.remove('app'));
+  c.classList.add('app'); curFilter = c.dataset.filter;
+  document.querySelectorAll('#feed .row').forEach(r => {
+    r.style.display = (curFilter === 'all' || r.dataset.app === curFilter) ? '' : 'none';
+  });
+}));
+
+// row expand
+document.querySelectorAll('#feed .row[data-detail]').forEach(r => r.addEventListener('click', e => {
+  if (e.target.closest('.detail')) return;
+  r.classList.toggle('open');
+}));
+
+// simulate tick — the arm keeps reporting
+const FEEDS = [
+  { app: 'bet-client', pr: '#4812', plan: 'withdrawal-flow-v1 · web', status: 'pass', cls: 'chip pass', txt: 'PASS' },
+  { app: 'native', pr: '#4814', plan: 'bet-slip-v1 · Android emu', status: 'pass', cls: 'chip pass', txt: 'PASS' },
+  { app: 'bet-client', pr: '#4812', plan: 'checkout-flow-v3 · iOS sim', status: 'pass', cls: 'chip pass', txt: 'PASS' },
+  { app: 'sso', pr: '#4808', plan: 'login-session-v1 · web', status: 'flaky', cls: 'chip flaky', txt: 'FLAKY' }
+];
+let fi = 0;
+document.getElementById('tick').addEventListener('click', () => {
+  const f = FEEDS[fi++ % FEEDS.length];
+  const row = document.createElement('div');
+  row.className = 'row new'; row.dataset.app = f.app;
+  const now = new Date();
+  const when = now.toTimeString().slice(0, 8);
+  row.innerHTML = `<div class="when">${when}</div>
+    <div class="what"><span class="${f.cls}"><span class="dot"></span>${f.txt}</span><span class="pr">${f.app} · ${f.pr}</span><span class="plan">${f.plan}</span></div>
+    <div class="thumbs"><div class="mockshot"><div class="bar"></div><div class="grid"><i></i><i class="hl"></i><i></i></div></div></div>
+    <div class="chev">></div>`;
+  const feed = document.getElementById('feed');
+  feed.prepend(row);
+  if (curFilter !== 'all' && f.app !== curFilter) row.style.display = 'none';
+  const rt = document.getElementById('runsToday');
+  rt.textContent = (parseInt(rt.textContent, 10) + 1);
+  if (f.status !== 'pass') { const pr = document.getElementById('passRate'); pr.innerHTML = (parseInt(pr.textContent,10) - 1) + '<small>%</small>'; }
+  toast('The arm reported: ' + f.app + ' · ' + f.plan.split(' ·')[0] + ' · ' + f.txt);
+});
+
+// queue actions (variant B)
+function wireQueue(sel, msg) {
+  document.querySelectorAll(sel).forEach(b => b.addEventListener('click', () => {
+    const q = b.closest('.qcard'); q.style.opacity = 0.4; q.querySelectorAll('button').forEach(x => x.disabled = true);
+    b.textContent = 'Done'; toast(msg);
+  }));
+}
+wireQueue('.q-approve', 'Approved — plan auto-runs on next deploy');
+wireQueue('.q-reject', 'Rejected — Plan Author will rework the draft');
+
+function toast(msg) {
+  const t = document.getElementById('toast');
+  t.textContent = msg; t.classList.add('show');
+  clearTimeout(t._h); t._h = setTimeout(() => t.classList.remove('show'), 2400);
+}
+</script>
+</body>
+</html>

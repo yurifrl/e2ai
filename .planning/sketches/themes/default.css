@@ -1,0 +1,65 @@
+/* e2ai sketch theme — derived from Brasa Design System (@nsxbet/admin-ui)
+   Tokens: light cool-gray surface, NSX blue primary, semantic green/amber/red,
+   10px radius, Inter + JetBrains Mono. Custom properties only. */
+:root {
+  /* Surfaces */
+  --bg: hsl(220 20% 97%);
+  --surface: hsl(0 0% 100%);
+  --surface-2: hsl(220 15% 94%);
+  --surface-3: hsl(220 15% 92%);
+  --fg: hsl(220 20% 10%);
+  --fg-muted: hsl(220 10% 40%);
+  --fg-faint: hsl(220 10% 55%);
+  --border: hsl(220 15% 88%);
+  --border-strong: hsl(220 12% 80%);
+
+  /* Brand + semantics */
+  --primary: hsl(214 100% 50%);
+  --primary-hover: hsl(214 100% 44%);
+  --primary-fg: hsl(0 0% 100%);
+  --primary-soft: hsl(214 100% 95%);
+  --success: hsl(151 56% 42%);
+  --success-soft: hsl(151 60% 94%);
+  --warning: hsl(24 74% 50%);
+  --warning-soft: hsl(24 80% 94%);
+  --danger: hsl(357 74% 54%);
+  --danger-soft: hsl(357 80% 95%);
+  --info: hsl(214 80% 55%);
+
+  /* Agent roster accents */
+  --agent-navigator: hsl(214 100% 50%);
+  --agent-judge: hsl(151 56% 42%);
+  --agent-author: hsl(220 10% 35%);
+  --agent-hunter: hsl(280 55% 55%);
+  --agent-analyst: hsl(24 74% 50%);
+
+  /* Type */
+  --font-sans: 'Inter', ui-sans-serif, system-ui, -apple-system, sans-serif;
+  --font-mono: 'JetBrains Mono', ui-monospace, 'SF Mono', Consolas, monospace;
+  --text-xs: 0.6875rem;
+  --text-sm: 0.8125rem;
+  --text-base: 0.9375rem;
+  --text-lg: 1.125rem;
+  --text-xl: 1.375rem;
+  --text-2xl: 1.75rem;
+
+  /* Space */
+  --space-1: 4px;
+  --space-2: 8px;
+  --space-3: 12px;
+  --space-4: 16px;
+  --space-6: 24px;
+  --space-8: 32px;
+  --space-12: 48px;
+
+  /* Shape */
+  --radius-sm: 6px;
+  --radius: 10px;
+  --radius-lg: 14px;
+  --radius-full: 9999px;
+
+  /* Elevation */
+  --shadow-sm: 0 1px 2px hsl(220 20% 10% / 0.06);
+  --shadow-md: 0 2px 8px hsl(220 20% 10% / 0.08);
+  --shadow-lg: 0 8px 24px hsl(220 20% 10% / 0.14);
+}
