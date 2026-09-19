@@ -1,0 +1,1 @@
+{"content":"Playwright HTML reporter: single self-contained HTML with embedded traces/screenshots (trace viewer inline), good for artifact attach. Limits: per-run only, no cross-run trend storage; custom platform UI + Postgres covers trends.","source":"web","provider":"websearch","confidence":"HIGH","fetched_at":"2026-09-19T15:24:32.549Z","ttl":86400000,"kind":"web"}

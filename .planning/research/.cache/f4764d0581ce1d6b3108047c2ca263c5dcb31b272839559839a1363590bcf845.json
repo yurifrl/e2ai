@@ -1,0 +1,1 @@
+{"content":"Portkey vs LiteLLM: Portkey = TS-first, hosted control plane, guardrails+cache, commercial; LiteLLM = Python, self-host standard, larger OSS adoption, budgets/virtual keys. For NSXBet (Go backend, self-host, secrets in-house): LiteLLM.","source":"web","provider":"websearch","confidence":"MEDIUM","fetched_at":"2026-09-19T15:24:31.183Z","ttl":86400000,"kind":"web"}

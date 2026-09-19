@@ -1,0 +1,1 @@
+{"content":"River (Postgres-backed Go queue, riverqueue.com, v0.46.0 Aug 2026; Pro adds workflows v2) is the fit for Go API + Postgres stack; Asynq requires Redis (extra infra). River: transactional enqueue, no extra service.","source":"web","provider":"websearch","confidence":"HIGH","fetched_at":"2026-09-19T15:24:33.077Z","ttl":86400000,"kind":"web"}
