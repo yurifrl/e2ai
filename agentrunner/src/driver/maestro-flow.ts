@@ -42,7 +42,14 @@ export function maestroFlowSteps(decision: Decision): string[] {
 /** Full YAML body for a one-action flow file fed to `maestro test`. */
 export function maestroFlowYaml(decision: Decision, opts?: { appId?: string }): string {
   const header = opts?.appId
-    ? [`- launchApp:\n    appId: ${opts.appId}\n    clearState: false`]
+    ? [
+        // maestro >= 2.10 rejects a bare command list ("Config Section
+        // Required"): every flow needs a config section + `---` separator.
+        // A `name`-only section does not satisfy it — appId is the minimal
+        // accepted field (probed against maestro 2.10.0, plan 04-01 T5).
+        `appId: ${opts.appId}\n---`,
+        `- launchApp:\n    appId: ${opts.appId}\n    clearState: false`,
+      ]
     : [];
   return [...header, ...maestroFlowSteps(decision)].join("\n");
 }

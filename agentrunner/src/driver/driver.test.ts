@@ -84,7 +84,7 @@ test("maestro flow: selector → tapOn id, label → tapOn text, key → pressKe
   ]);
 });
 
-test("maestro flow: selector+text composes tapOn then inputText; appId prepends launchApp", () => {
+test("maestro flow: selector+text composes tapOn then inputText; appId prepends config section + launchApp", () => {
   const steps = maestroFlowSteps(decision({ kind: "act", selector: "#user", text: "yuri" }));
   assert.equal(steps.length, 2);
   assert.match(steps[0]!, /tapOn:\n {4}id: #user/);
@@ -92,7 +92,7 @@ test("maestro flow: selector+text composes tapOn then inputText; appId prepends 
   const yaml = maestroFlowYaml(decision({ kind: "act", selector: "#user" }), {
     appId: "com.e2ai.app",
   });
-  assert.match(yaml, /^- launchApp:\n {4}appId: com\.e2ai\.app\n {4}clearState: false\n/);
+  assert.match(yaml, /^appId: com\.e2ai\.app\n---\n- launchApp:\n {4}appId: com\.e2ai\.app\n {4}clearState: false\n/);
 });
 
 test("maestro flow: unmappable and non-act decisions are rejected (app-level error)", () => {
