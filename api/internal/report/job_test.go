@@ -43,7 +43,9 @@ func migrate(t *testing.T, pool *pgxpool.Pool) {
 	if err := app.Migrate(context.Background(), pool, slog.Default()); err != nil {
 		t.Fatalf("migrate schema: %v", err)
 	}
-	for _, table := range []string{"webhook_events", "pr_comments", "artifacts", "test_results", "runs", "registered_apps"} {
+	// agent tables clear first (they cascade from runs, but an explicit
+	// delete keeps the scratch db deterministic across suites).
+	for _, table := range []string{"session_steps", "agent_sessions", "webhook_events", "pr_comments", "artifacts", "test_results", "runs", "registered_apps"} {
 		if _, err := pool.Exec(context.Background(), "delete from "+table); err != nil {
 			t.Fatalf("clear %s: %v", table, err)
 		}

@@ -117,15 +117,80 @@ type stepDTO struct {
 	Screenshots []string `json:"screenshots"`
 }
 
+// Phase 5 T3 wire DTOs (additive): the agentic trajectory extension of
+// ReportData. Same locked mirror — T6 mirrors these as TrajectorySession,
+// TrajectoryStep, EvidenceRef, AgentSummary and AgentSummarySession in
+// web/src/lib/types.ts. Deterministic Playwright runs leave trajectory and
+// agent_summary null (no agent_sessions rows), so the existing wire shape
+// is byte-identical for them.
+
+// evidenceRefDTO is one typed artifact citation the React page can link:
+// the phase 3 session_steps.evidence shape ({kind, path}) plus url, a
+// token-gated artifact page URL (same convention as the filmstrip
+// screenshots — sanitizeArtifactPath guards the traversal surface).
+type evidenceRefDTO struct {
+	Kind string  `json:"kind"`
+	Path string  `json:"path"`
+	URL  *string `json:"url"`
+}
+
+// trajectoryStepDTO is one append-only trajectory entry (session_steps row).
+// decision/action are the agent's raw jsonb payloads passed through
+// verbatim; steps carry the per-step token/cost split.
+type trajectoryStepDTO struct {
+	Idx            int              `json:"idx"`
+	Kind           string           `json:"kind"` // navigate|act|observe|judge|assert|error
+	Decision       json.RawMessage  `json:"decision"`
+	Action         json.RawMessage  `json:"action"`
+	Evidence       []evidenceRefDTO `json:"evidence"`
+	TokensIn       int              `json:"tokens_in"`
+	TokensOut      int              `json:"tokens_out"`
+	CostMillicents int64            `json:"cost_millicents"`
+	CreatedAt      string           `json:"created_at"`
+}
+
+// trajectorySessionDTO is one agent session's full trajectory. When a
+// session's step count exceeds wireMaxLimit, steps holds the most recent
+// wireMaxLimit entries and truncated is true (steps_used stays
+// authoritative).
+type trajectorySessionDTO struct {
+	SessionID      string              `json:"session_id"`
+	Role           string              `json:"role"`
+	Status         string              `json:"status"`
+	StepsUsed      int                 `json:"steps_used"`
+	CostMillicents int64               `json:"cost_millicents"`
+	Truncated      bool                `json:"truncated"`
+	Steps          []trajectoryStepDTO `json:"steps"`
+}
+
+// agentSummarySessionDTO is one per-session rollup row (same values as the
+// trajectory header, kept so the summary renders without the full blob).
+type agentSummarySessionDTO struct {
+	Role           string `json:"role"`
+	Status         string `json:"status"`
+	CostMillicents int64  `json:"cost_millicents"`
+}
+
+// agentSummaryDTO is the wire AgentSummary: per-session rollups plus the
+// run-total agent cost (sum of agent_sessions.cost_millicents — the
+// session accumulators, not re-summed steps).
+type agentSummaryDTO struct {
+	Sessions            []agentSummarySessionDTO `json:"sessions"`
+	TotalCostMillicents int64                    `json:"total_cost_millicents"`
+}
+
 // reportDataDTO is the wire ReportData: one blob the report viewer renders
-// directly — KPI counts, failures first, then the filmstrip.
+// directly — KPI counts, failures first, then the filmstrip. trajectory and
+// agent_summary are additive optional fields, nil for deterministic runs.
 type reportDataDTO struct {
-	Run      runDTO          `json:"run"`
-	Counts   countsDTO       `json:"counts"`
-	Projects []string        `json:"projects"`
-	Failures []testResultDTO `json:"failures"`
-	Flaky    []testResultDTO `json:"flaky"`
-	Steps    []stepDTO       `json:"steps"`
+	Run          runDTO                 `json:"run"`
+	Counts       countsDTO              `json:"counts"`
+	Projects     []string               `json:"projects"`
+	Failures     []testResultDTO        `json:"failures"`
+	Flaky        []testResultDTO        `json:"flaky"`
+	Steps        []stepDTO              `json:"steps"`
+	Trajectory   []trajectorySessionDTO `json:"trajectory"`
+	AgentSummary *agentSummaryDTO       `json:"agent_summary"`
 }
 
 // RunsHTTP mounts the runs surface: paginated run list, run detail, the
@@ -334,15 +399,20 @@ func BuildRunDetail(d *runs.RunDetail) runDetailDTO {
 var reportOutcomeRank = map[string]int{"FAIL": 0, "FLAKY": 1, "PASS": 2, "SKIPPED": 3}
 
 // BuildReportData assembles the report page blob: KPI counts, failures first,
-// projects, and the per-test filmstrip. Deterministic — no LLM calls.
-func BuildReportData(d *runs.RunDetail) reportDataDTO {
+// projects, the per-test filmstrip, and (phase 5, T3) the agentic
+// trajectory + cost summary. Deterministic — no LLM calls. trajectory /
+// agent_summary are nil for deterministic runs (the caller passes what
+// loadTrajectory read; nil, nil for a run with no agent sessions).
+func BuildReportData(d *runs.RunDetail, trajectory []trajectorySessionDTO, summary *agentSummaryDTO) reportDataDTO {
 	dto := reportDataDTO{
-		Run:      wireRun(d.Run),
-		Counts:   reportCounts(d),
-		Projects: []string{},
-		Failures: []testResultDTO{},
-		Flaky:    []testResultDTO{},
-		Steps:    []stepDTO{},
+		Run:          wireRun(d.Run),
+		Counts:       reportCounts(d),
+		Projects:     []string{},
+		Failures:     []testResultDTO{},
+		Flaky:        []testResultDTO{},
+		Steps:        []stepDTO{},
+		Trajectory:   trajectory,
+		AgentSummary: summary,
 	}
 
 	seen := map[string]bool{}
@@ -531,5 +601,10 @@ func (s *RunsHTTP) RunReport(w http.ResponseWriter, r *http.Request) {
 		writeErr(w, http.StatusNotFound, "run not found")
 		return
 	}
-	writeWire(w, http.StatusOK, BuildReportData(detail))
+	trajectory, summary, err := loadTrajectory(r.Context(), s.Pool, pgUUID(runID))
+	if err != nil {
+		writeErr(w, http.StatusInternalServerError, "load trajectory failed")
+		return
+	}
+	writeWire(w, http.StatusOK, BuildReportData(detail, trajectory, summary))
 }
