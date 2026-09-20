@@ -15,6 +15,7 @@ import (
 	"time"
 
 	"github.com/NSXBet/e2ai/api/internal/app"
+	"github.com/NSXBet/e2ai/api/internal/approvals"
 	"github.com/NSXBet/e2ai/api/internal/derive"
 	"github.com/NSXBet/e2ai/api/internal/ingest"
 	"github.com/NSXBet/e2ai/api/internal/platform/config"
@@ -183,13 +184,21 @@ func run() error {
 		plansSurface = plans.NewPlansHTTP(pool.Pool, ghClient)
 	}
 
+	// APPR-01/02 approvals HTTP surface: pending queue + the two attributed
+	// decision endpoints. Same degraded posture — unmounted when postgres
+	// is down.
+	var approvalsSurface *approvals.ApprovalsHTTP
+	if pool != nil {
+		approvalsSurface = approvals.NewApprovalsHTTP(pool.Pool, cfg.DevFallbackUser)
+	}
+
 	handler := httpx.IdentityWithConfig(
 		httpx.IdentityConfig{DevFallbackUser: cfg.DevFallbackUser},
 		httpx.RequestLog(httpx.RedactSecrets(logger, map[string]string{
 			"WEBHOOK_SECRET":          cfg.WebhookSecret,
 			"GITHUB_TOKEN":            cfg.GitHubToken,
 			"E2AI_REPORT_LINK_SECRET": cfg.ReportLinkSecret,
-		}), newMux(dbHealth, webhook, runsSurface, plansSurface, pool, riverClient)),
+		}), newMux(dbHealth, webhook, runsSurface, plansSurface, approvalsSurface, pool, riverClient)),
 	)
 	server := &http.Server{
 		Addr:              ":" + strconv.Itoa(cfg.Port),
@@ -217,7 +226,7 @@ func run() error {
 
 // newMux returns the api HTTP surface: liveness/health, the GitHub webhook,
 // and (when postgres is up) the T11 runs + artifacts surface.
-func newMux(dbHealth func() bool, webhook http.Handler, runs *report.RunsHTTP, plans *plans.PlansHTTP, pool *postgres.Pool, riverClient *river.Client) http.Handler {
+func newMux(dbHealth func() bool, webhook http.Handler, runs *report.RunsHTTP, plans *plans.PlansHTTP, approvals *approvals.ApprovalsHTTP, pool *postgres.Pool, riverClient *river.Client) http.Handler {
 	mux := http.NewServeMux()
 	mux.HandleFunc("/healthz", func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
@@ -246,6 +255,10 @@ func newMux(dbHealth func() bool, webhook http.Handler, runs *report.RunsHTTP, p
 		// permission), sync trigger + corpus decisions (POST, edit
 		// permission).
 		plans.Mount(mux)
+	}
+	if approvals != nil {
+		// Approvals surface (APPR-01/02): queue + attributed decisions.
+		approvals.Mount(mux)
 	}
 	if pool != nil && pool.Pool != nil {
 		// Plan resolution + derive endpoints (T8, APPR-01/DERV-01): the
