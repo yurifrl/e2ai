@@ -3,7 +3,8 @@
 //
 // Toolchain: `adb devices` (device presence), `adb exec-out screencap -p`
 // (PNG bytes via binary-safe stdout), `adb shell am start` (deep link /
-// URL navigation), `maestro test <flow>` (one YAML flow per act decision),
+// URL navigation, plus `app://<package>` native app launch by resolved
+// launcher component), `maestro test <flow>` (one YAML flow per act decision),
 // `maestro record <flow> <out>` (video evidence).
 //
 // Tool not installed / not on PATH ⇒ InfraFlakeError("infra_flake:tool_missing",
@@ -129,6 +130,50 @@ export class AndroidDriver implements SurfaceDriver {
     await this.assertDeviceReady();
     if (decision.kind === "navigate") {
       const url = String(decision.url ?? "");
+      if (url.startsWith("app://")) {
+        // Native app navigation: `app://<package>` resolves the package's
+        // launcher activity and starts it by component (`am start -n`). A
+        // VIEW deeplink (`am start -a VIEW -d <url>`) has no handler for
+        // system apps like Settings — resolve-activity returns nothing for
+        // every settings:// shape on API 35. `cmd package resolve-activity
+        // --brief` prints the component as its last non-empty stdout line;
+        // an unknown package prints "No activity found" (still exit 0).
+        const pkg = url.slice("app://".length);
+        const resolved = await this.exec.run(
+          this.adb,
+          ["shell", "cmd", "package", "resolve-activity", "--brief", pkg],
+          { timeoutMs: DEVICE_PROBE_TIMEOUT_MS },
+        );
+        const component = resolved.stdout
+          .split("\n")
+          .map((l) => l.trim())
+          .filter((l) => l.length > 0)
+          .at(-1);
+        if (resolved.spawnError) {
+          throw new InfraFlakeError("infra_flake:tool_missing", this.adb, resolved.spawnError);
+        }
+        if (resolved.timedOut) {
+          throw new InfraFlakeError(
+            "infra_flake:probe_timeout",
+            this.adb,
+            "resolve-activity did not answer in time",
+          );
+        }
+        if (
+          resolved.code !== 0 ||
+          !component ||
+          component.includes("No activity") ||
+          !component.startsWith(`${pkg}/`)
+        ) {
+          throw new SurfaceConfigError(
+            `no launcher activity for ${pkg} (${
+              resolved.stderr.trim() || component || "empty"
+            })`,
+          );
+        }
+        await this.exec.run(this.adb, ["shell", "am", "start", "-n", component]);
+        return { action: { navigated: url, component }, evidence: [] };
+      }
       await this.exec.run(this.adb, [
         "shell",
         "am",
@@ -141,7 +186,8 @@ export class AndroidDriver implements SurfaceDriver {
       return { action: { navigated: url }, evidence: [] };
     }
     if (decision.kind !== "act") {
-      // observe/judge/assert carry no device mutation until T5/T6 land.
+      // observe/judge/assert carry no device mutation — acts run through
+      // maestro below.
       return { action: { kind: decision.kind, noop: true }, evidence: [] };
     }
 
