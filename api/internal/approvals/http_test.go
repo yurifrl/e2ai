@@ -60,10 +60,21 @@ func TestApprovalsHTTPIdentityWall(t *testing.T) {
 	pool := testPool(t)
 	srv := serve(t, NewApprovalsHTTP(pool, "tester"))
 
-	if status, _ := call(t, "GET", srv.URL+"/api/approvals", "", "", ""); status != http.StatusUnauthorized {
+	// The dev-fallback middleware fabricates an identity for un-proxied
+	// traffic (that behavior is TestApprovalsFallbackIdentityRefused's
+	// subject), so 401 here needs a mux WITHOUT the identity middleware —
+	// exactly what the api binary serves if wired without it.
+	bare := httptest.NewServer(func() http.Handler {
+		mux := http.NewServeMux()
+		NewApprovalsHTTP(pool, "tester").Mount(mux)
+		return mux
+	}())
+	t.Cleanup(bare.Close)
+
+	if status, _ := call(t, "GET", bare.URL+"/api/approvals", "", "", ""); status != http.StatusUnauthorized {
 		t.Errorf("unauthenticated queue = %d, want 401", status)
 	}
-	if status, _ := call(t, "POST", srv.URL+"/api/plan-versions/"+uuid.NewString()+"/approve", "{}", "", ""); status != http.StatusUnauthorized {
+	if status, _ := call(t, "POST", bare.URL+"/api/plan-versions/"+uuid.NewString()+"/approve", "{}", "", ""); status != http.StatusUnauthorized {
 		t.Errorf("unauthenticated decide = %d, want 401", status)
 	}
 	// View-only identity: reads fine, decisions forbidden.

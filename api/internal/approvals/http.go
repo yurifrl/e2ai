@@ -197,12 +197,13 @@ func listPending(ctx context.Context, pool *pgxpool.Pool) ([]pendingApprovalDTO,
 		var v planVersionDTO
 		var p planDTO
 		var title, trigger pgtype.Text
+		// A NULL surfaces array scans directly into a nil slice — pgx has no
+		// separate null-flag destination; the nil check below handles absence.
 		var surfaces []string
-		var surfacesNull bool
 		var latestID pgtype.UUID
 		if err := rows.Scan(&v.ID, &v.PlanID, &v.Version, &v.ContentHash, &v.Status,
 			&v.CreatedBy, &v.CreatedAt,
-			&p.App, &title, &surfaces, &surfacesNull, &trigger,
+			&p.App, &title, &surfaces, &trigger,
 			&p.Status, &p.SourcePath, &latestID, &p.UpdatedAt); err != nil {
 			return nil, err
 		}
