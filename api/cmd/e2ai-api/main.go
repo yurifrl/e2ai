@@ -14,17 +14,17 @@ import (
 	"syscall"
 	"time"
 
+	"github.com/NSXBet/e2ai/api/internal/agents"
 	"github.com/NSXBet/e2ai/api/internal/app"
 	"github.com/NSXBet/e2ai/api/internal/approvals"
-	"github.com/NSXBet/e2ai/api/internal/agents"
 	"github.com/NSXBet/e2ai/api/internal/derive"
 	"github.com/NSXBet/e2ai/api/internal/ingest"
+	"github.com/NSXBet/e2ai/api/internal/plans"
 	"github.com/NSXBet/e2ai/api/internal/platform/config"
 	"github.com/NSXBet/e2ai/api/internal/platform/github"
 	"github.com/NSXBet/e2ai/api/internal/platform/httpx"
 	"github.com/NSXBet/e2ai/api/internal/platform/postgres"
 	"github.com/NSXBet/e2ai/api/internal/platform/river"
-	"github.com/NSXBet/e2ai/api/internal/plans"
 	"github.com/NSXBet/e2ai/api/internal/report"
 	"github.com/jackc/pgx/v5"
 )
@@ -132,7 +132,7 @@ func run() error {
 		// Agent-session orphan sweep (AGNT-02): the periodic half of T2's
 		// wiring — lapsed claimed/running sessions are marked failed and a
 		// fresh queued session is requeued atomically.
-		river.AddWorker(workers, &agents.SweepWorker{Pool: pool.Pool, Logger: logger})
+		river.AddWorker[agents.SweepArgs](workers, &agents.SweepWorker{Pool: pool.Pool, Logger: logger})
 
 		var periodic []*river.PeriodicJob
 		periodic = append(periodic, river.NewPeriodicJob(
@@ -203,26 +203,30 @@ func run() error {
 		approvalsSurface = approvals.NewApprovalsHTTP(pool.Pool, cfg.DevFallbackUser)
 	}
 
+	// Runner service token (AGNT-03): the second credential half for the
+	// agent-session lifecycle endpoints. Optional in dev — a missing token
+	// leaves the endpoints on BFF identity alone.
+	runnerToken := os.Getenv("E2AI_RUNNER_SERVICE_TOKEN")
+	if runnerToken == "" && pool != nil {
+		logger.Warn("E2AI_RUNNER_SERVICE_TOKEN unset; runner endpoints accept BFF identity only")
+	}
+
 	// AGNT-03 agents HTTP surface: runner lifecycle endpoints (heartbeat,
 	// steps, complete, fail) gated by the runner service token in addition
-	// to BFF identity, plus the admin kill switch and session enqueue. The
-	// token is optional in dev (BFF-identity-only); in prod the env var
-	// must be set. Same degraded posture — unmounted when postgres is down.
+	// to BFF identity, plus the admin kill switch and session enqueue. Same
+	// degraded posture — unmounted when postgres is down.
 	var agentsSurface *agents.AgentsHTTP
 	if pool != nil {
-		runnerToken := os.Getenv("E2AI_RUNNER_SERVICE_TOKEN")
-		if runnerToken == "" {
-			logger.Warn("E2AI_RUNNER_SERVICE_TOKEN unset; runner endpoints accept BFF identity only")
-		}
 		agentsSurface = agents.NewAgentsHTTP(pool.Pool, runnerToken)
 	}
 
 	handler := httpx.IdentityWithConfig(
 		httpx.IdentityConfig{DevFallbackUser: cfg.DevFallbackUser},
 		httpx.RequestLog(httpx.RedactSecrets(logger, map[string]string{
-			"WEBHOOK_SECRET":          cfg.WebhookSecret,
-			"GITHUB_TOKEN":            cfg.GitHubToken,
-			"E2AI_REPORT_LINK_SECRET": cfg.ReportLinkSecret,
+			"WEBHOOK_SECRET":            cfg.WebhookSecret,
+			"GITHUB_TOKEN":              cfg.GitHubToken,
+			"E2AI_REPORT_LINK_SECRET":   cfg.ReportLinkSecret,
+			"E2AI_RUNNER_SERVICE_TOKEN": runnerToken,
 		}), newMux(dbHealth, webhook, runsSurface, plansSurface, approvalsSurface, agentsSurface, pool, riverClient)),
 	)
 	server := &http.Server{
@@ -251,7 +255,7 @@ func run() error {
 
 // newMux returns the api HTTP surface: liveness/health, the GitHub webhook,
 // and (when postgres is up) the T11 runs + artifacts surface.
-func newMux(dbHealth func() bool, webhook http.Handler, runs *report.RunsHTTP, plans *plans.PlansHTTP, approvals *approvals.ApprovalsHTTP, pool *postgres.Pool, riverClient *river.Client) http.Handler {
+func newMux(dbHealth func() bool, webhook http.Handler, runs *report.RunsHTTP, plans *plans.PlansHTTP, approvals *approvals.ApprovalsHTTP, agentSessions *agents.AgentsHTTP, pool *postgres.Pool, riverClient *river.Client) http.Handler {
 	mux := http.NewServeMux()
 	mux.HandleFunc("/healthz", func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
@@ -284,6 +288,11 @@ func newMux(dbHealth func() bool, webhook http.Handler, runs *report.RunsHTTP, p
 	if approvals != nil {
 		// Approvals surface (APPR-01/02): queue + attributed decisions.
 		approvals.Mount(mux)
+	}
+	if agentSessions != nil {
+		// Agents surface (AGNT-03): runner lifecycle (service token), the
+		// admin kill switch + session enqueue, and the queue data listing.
+		agentSessions.Mount(mux)
 	}
 	if pool != nil && pool.Pool != nil {
 		// Plan resolution + derive endpoints (T8, APPR-01/DERV-01): the
