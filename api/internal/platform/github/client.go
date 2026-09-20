@@ -12,12 +12,15 @@ package github
 import (
 	"bytes"
 	"context"
+	"encoding/base64"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"net/http"
 	"net/url"
 	"strconv"
+	"strings"
 	"sync/atomic"
 	"time"
 )
@@ -372,4 +375,70 @@ func (c *Client) ListCompletedRuns(ctx context.Context, owner, repo, workflowNam
 		})
 	}
 	return runs, nil
+}
+
+// --- contents (corpus spec seeding, T3) ---
+
+// ErrNotFound is returned when GitHub answers 404 for a repo file or
+// directory. Callers (spec seeding) use it to distinguish "specs dir
+// missing" from transport failures.
+var ErrNotFound = errors.New("github: not found")
+
+// ContentsEntry is one row of a directory listing from the contents API.
+type ContentsEntry struct {
+	Name string `json:"name"`
+	Path string `json:"path"`
+	SHA  string `json:"sha"`
+	Type string `json:"type"` // file | dir
+	Size int    `json:"size"`
+}
+
+// contentsFile is the single-file shape of the contents API: the payload is
+// base64-encoded in Content (encoding "base64") unless the file exceeds the
+// 1 MiB contents cap, in which case Content is empty and GitURL is set.
+type contentsFile struct {
+	Name     string `json:"name"`
+	Path     string `json:"path"`
+	SHA      string `json:"sha"`
+	Type     string `json:"type"`
+	Content  string `json:"content"`
+	Encoding string `json:"encoding"`
+}
+
+// GetFile fetches one file's decoded text content at ref (branch, tag, or
+// full SHA). Files over the contents-API 1 MiB cap are rejected (Playwright
+// specs are far below it; failing loudly beats silently truncating an
+// oracle source).
+// GET /repos/{owner}/{repo}/contents/{path}?ref={ref}
+func (c *Client) GetFile(ctx context.Context, owner, repo, ref, path string) (string, error) {
+	endpoint := fmt.Sprintf("repos/%s/%s/contents/%s?ref=%s", owner, repo, url.PathEscape(path), url.QueryEscape(ref))
+	var f contentsFile
+	if err := c.do(ctx, http.MethodGet, endpoint, nil, &f); err != nil {
+		if apiErr, ok := err.(*APIError); ok && apiErr.StatusCode == http.StatusNotFound {
+			return "", ErrNotFound
+		}
+		return "", err
+	}
+	if f.Content == "" || f.Encoding != "base64" {
+		return "", fmt.Errorf("github: contents %q returned no base64 payload (oversized or encoding %q)", path, f.Encoding)
+	}
+	raw, err := base64.StdEncoding.DecodeString(strings.Join(strings.Fields(f.Content), ""))
+	if err != nil {
+		return "", fmt.Errorf("github: decode contents %q: %w", path, err)
+	}
+	return string(raw), nil
+}
+
+// ListDir lists one directory level at ref. Missing directory -> ErrNotFound.
+// GET /repos/{owner}/{repo}/contents/{path}?ref={ref}
+func (c *Client) ListDir(ctx context.Context, owner, repo, ref, dir string) ([]ContentsEntry, error) {
+	endpoint := fmt.Sprintf("repos/%s/%s/contents/%s?ref=%s", owner, repo, url.PathEscape(strings.Trim(dir, "/")), url.QueryEscape(ref))
+	var entries []ContentsEntry
+	if err := c.do(ctx, http.MethodGet, endpoint, nil, &entries); err != nil {
+		if apiErr, ok := err.(*APIError); ok && apiErr.StatusCode == http.StatusNotFound {
+			return nil, ErrNotFound
+		}
+		return nil, err
+	}
+	return entries, nil
 }
