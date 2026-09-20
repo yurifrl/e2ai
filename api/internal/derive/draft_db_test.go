@@ -39,7 +39,7 @@ func testDerivePool(t *testing.T) *pgxpool.Pool {
 	if err := app.MigrateRiver(ctx, pool); err != nil {
 		t.Fatalf("migrate river: %v", err)
 	}
-	for _, table := range []string{"plans", "plan_versions", "plan_approvals", "corpus_behaviors", "corpus_learnings", "registered_apps", "river_job"} {
+	for _, table := range []string{"run_plan_resolutions", "plans", "plan_versions", "plan_approvals", "corpus_behaviors", "corpus_learnings", "registered_apps", "river_job"} {
 		if _, err := pool.Exec(ctx, "truncate table "+table+" cascade"); err != nil {
 			t.Fatalf("truncate %s: %v", table, err)
 		}

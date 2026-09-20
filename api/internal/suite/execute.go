@@ -189,6 +189,18 @@ func (e *Executor) Work(ctx context.Context, job *river.Job[ExecuteArgs]) error 
 		return err
 	}
 
+	// Plan resolution gate (APPR-01): decide which approved plan versions
+	// this deploy runs BEFORE anything else touches GitHub or the container.
+	// Draft-only catalogs never execute a suite; changed plan versions keep
+	// the last approved ancestor running.
+	planEnv, skip, err := e.resolvePlanGate(ctx, run, logger)
+	if err != nil {
+		return e.fail(ctx, run, "plan resolution", err, logger)
+	}
+	if skip {
+		return nil // the gate failed the run; nothing further to do
+	}
+
 	// Neutral check-run in_progress on the head SHA (REPT-03 groundwork).
 	if e.CheckRuns != nil {
 		cr, err := e.CheckRuns.CreateCheckRun(ctx, run.owner, run.repo, CheckRunInput{
@@ -215,6 +227,7 @@ func (e *Executor) Work(ctx context.Context, job *river.Job[ExecuteArgs]) error 
 		"E2AI_SHA=" + run.headSHA,
 		"E2AI_ARTIFACTS_DIR=/artifacts",
 	}
+	env = append(env, planEnv...)
 	if e.GitHubToken != "" {
 		env = append(env, "E2AI_GITHUB_TOKEN="+e.GitHubToken)
 	}
@@ -254,17 +267,18 @@ type suiteRun struct {
 	repo    string
 	headSHA string
 	status  runs.Status
+	appID   uuid.UUID
 }
 
 // loadRun fetches the run joined with its registered app.
 func (e *Executor) loadRun(ctx context.Context, runID uuid.UUID) (*suiteRun, error) {
 	r := &suiteRun{id: runID}
 	err := e.Pool.QueryRow(ctx, `
-		select r.head_sha, r.status, a.owner, a.repo
+		select r.head_sha, r.status, a.owner, a.repo, a.id
 		from runs r
 		join registered_apps a on a.id = r.app_id
 		where r.id = $1
-	`, runID).Scan(&r.headSHA, &r.status, &r.owner, &r.repo)
+	`, runID).Scan(&r.headSHA, &r.status, &r.owner, &r.repo, &r.appID)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return nil, fmt.Errorf("run %s not found", runID)
 	}
@@ -296,6 +310,200 @@ func (e *Executor) fail(ctx context.Context, r *suiteRun, stage string, cause er
 	_ = errors.Join(cause, noteFail(ctx, e.Pool, r.id, stage, cause))
 	logger.Error("suite execution failed", "stage", stage, "error", cause)
 	return fmt.Errorf("execute %s: %w", stage, cause)
+}
+
+// --- plan resolution gate (APPR-01, T8) ---
+
+// resolutionSource is the provenance stamped on every selected plan
+// version: the catalog is resolved from the app's registered plans source
+// at execute time, so the decision is always run-scoped.
+const resolutionSource = "plans_source"
+
+type selectedPlan struct {
+	PlanID    string `json:"plan_id"`
+	Version   string `json:"version"`
+	Hash      string `json:"hash"`
+	Source    string `json:"source"`
+	VersionID string `json:"-"`
+}
+
+type excludedPlan struct {
+	PlanID string `json:"plan_id"`
+	Reason string `json:"reason"`
+}
+
+// planResolution is the record stored per run. JSON shape mirrors the REST
+// surface: {selected[{plan_id,version,hash,source}], excluded[], diff_truncated}.
+type planResolution struct {
+	Selected      []selectedPlan `json:"selected"`
+	Excluded      []excludedPlan `json:"excluded"`
+	DiffTruncated *bool          `json:"diff_truncated"`
+}
+
+// resolvePlanGate decides what this deploy runs and records the decision in
+// run_plan_resolutions. It returns the E2AI_PLANS env entries for the
+// container (empty for the legacy path). skip=true means the run was
+// failed by the gate itself: a catalog with plans but no approved version
+// anywhere is draft-only, and APPR-01 forbids executing a suite without
+// approved expectations — nothing else (check-run, container) happens.
+//
+// Changed plan versions (a newer unapproved version over an approved one)
+// keep the last approved version running: selection is version-scoped, so
+// the approved ancestor is selected and the change is recorded as excluded.
+func (e *Executor) resolvePlanGate(ctx context.Context, r *suiteRun, logger *slog.Logger) (planEnv []string, skip bool, err error) {
+	rows, rerr := e.Pool.Query(ctx, `
+		select p.id,
+			coalesce((select v.version || '|' || v.content_hash
+				from plan_versions v
+				where v.plan_id = p.id
+				order by v.created_at desc, v.version desc
+				limit 1), ''),
+			coalesce((select v.version || '|' || v.content_hash || '|' || v.id
+				from plan_versions v
+				join plan_approvals pa on pa.plan_version_id = v.id and pa.decision = 'approved'
+				where v.plan_id = p.id
+				order by v.created_at desc, v.version desc
+				limit 1), '')
+		from plans p
+		where p.app_id = $1
+		order by p.id
+	`, r.appID)
+	if rerr != nil {
+		return nil, false, fmt.Errorf("plan resolution query: %w", rerr)
+	}
+	defer rows.Close()
+
+	res := planResolution{Selected: []selectedPlan{}, Excluded: []excludedPlan{}}
+	var plansSeen int
+	for rows.Next() {
+		plansSeen++
+		var planID, latest, approved string
+		if err := rows.Scan(&planID, &latest, &approved); err != nil {
+			return nil, false, fmt.Errorf("scan plan resolution: %w", err)
+		}
+		if latest == "" {
+			res.Excluded = append(res.Excluded, excludedPlan{planID,
+				"no synced versions; nothing to run"})
+			continue
+		}
+		if approved == "" {
+			// Draft-only plan: never executes (APPR-01).
+			res.Excluded = append(res.Excluded, excludedPlan{planID,
+				"version " + splitPipe(latest, 0) + " has no approved version; drafts never execute"})
+			continue
+		}
+		if splitPipe(latest, 0) != splitPipe(approved, 0) {
+			res.Excluded = append(res.Excluded, excludedPlan{planID,
+				"version " + splitPipe(latest, 0) + " is not approved; last approved version " +
+					splitPipe(approved, 0) + " keeps running"})
+		}
+		res.Selected = append(res.Selected, selectedPlan{
+			PlanID:    planID,
+			Version:   splitPipe(approved, 0),
+			Hash:      splitPipe(approved, 1),
+			Source:    resolutionSource,
+			VersionID: splitPipe(approved, 2),
+		})
+	}
+	if err := rows.Err(); err != nil {
+		return nil, false, fmt.Errorf("plan resolution rows: %w", err)
+	}
+	legacy := plansSeen == 0
+
+	if !legacy && len(res.Selected) == 0 {
+		note := "plan resolution: draft-only catalog, suite not executed (APPR-01)"
+		if terr := runs.Transition(ctx, e.Pool, pgUUID(r.id), runs.StatusFailed); terr != nil {
+			logger.Error("plan gate failed-run transition failed", "error", terr)
+		}
+		if _, uerr := e.Pool.Exec(ctx, `update runs set error_note = $2 where id = $1`, r.id, note); uerr != nil {
+			logger.Warn("plan gate error_note persist failed", "error", uerr)
+		}
+		logger.Error("plan gate blocked execution", "plans", plansSeen)
+		// Record the resolution even for a blocked run: the record is the
+		// evidence trail the REST surface reads.
+		if rerr := e.recordResolution(ctx, r.id, legacy, &res); rerr != nil {
+			logger.Warn("plan resolution record persist failed", "error", rerr)
+		}
+		return nil, true, nil
+	}
+
+	if rerr := e.recordResolution(ctx, r.id, legacy, &res); rerr != nil {
+		logger.Warn("plan resolution record persist failed; continuing", "error", rerr)
+	}
+
+	if legacy {
+		logger.Info("plan resolution: legacy path (no plans registered)")
+		return nil, false, nil
+	}
+
+	env := make([]string, 0, 1)
+	env = append(env, "E2AI_PLANS="+E2AIPlansEnv(res.Selected))
+	logger.Info("plan resolution complete",
+		"selected", len(res.Selected), "excluded", len(res.Excluded))
+	return env, false, nil
+}
+
+// recordResolution upserts the run's resolution record. Replayed jobs
+// overwrite in place — the latest decision is the evidence. The plan_id /
+// plan_version_id / content_hash columns carry the primary (first) selected
+// version; the full selection lives in resolution JSONB. Legacy runs carry
+// mode legacy_full_suite with no plan columns.
+func (e *Executor) recordResolution(ctx context.Context, runID uuid.UUID, legacy bool, res *planResolution) error {
+	resolution, err := json.Marshal(res)
+	if err != nil {
+		return fmt.Errorf("marshal resolution: %w", err)
+	}
+	selected, err := json.Marshal(res.Selected)
+	if err != nil {
+		return fmt.Errorf("marshal selected: %w", err)
+	}
+	mode := "approved"
+	planID, versionID, hash := any(nil), any(nil), any(nil)
+	if !legacy {
+		if len(res.Selected) == 0 {
+			mode = "draft_only"
+		} else {
+			primary := res.Selected[0]
+			planID, versionID, hash = primary.PlanID, primary.VersionID, primary.Hash
+		}
+	} else {
+		mode = "legacy_full_suite"
+	}
+	_, err = e.Pool.Exec(ctx, `
+		insert into run_plan_resolutions (run_id, plan_id, plan_version_id, content_hash, selected, mode, resolution)
+		values ($1, $2, $3, $4, $5, $6, $7)
+		on conflict (run_id) do update
+		set plan_id = excluded.plan_id,
+			plan_version_id = excluded.plan_version_id,
+			content_hash = excluded.content_hash,
+			selected = excluded.selected,
+			mode = excluded.mode,
+			resolution = excluded.resolution
+	`, runID, planID, versionID, hash, selected, mode, resolution)
+	if err != nil {
+		return fmt.Errorf("upsert run_plan_resolutions: %w", err)
+	}
+	return nil
+}
+
+// E2AIPlansEnv renders the container's plan manifest: one
+// planID@version@hash entry per selected version, comma-joined.
+func E2AIPlansEnv(sel []selectedPlan) string {
+	entries := make([]string, 0, len(sel))
+	for _, s := range sel {
+		entries = append(entries, s.PlanID+"@"+s.Version+"@"+s.Hash)
+	}
+	return strings.Join(entries, ",")
+}
+
+// splitPipe splits the query's "version|hash|id" composite; 0 version,
+// 1 content hash, 2 version uuid.
+func splitPipe(composite string, i int) string {
+	parts := strings.Split(composite, "|")
+	if i < len(parts) {
+		return parts[i]
+	}
+	return ""
 }
 
 // store persists the parsed report: test_results (with per-test

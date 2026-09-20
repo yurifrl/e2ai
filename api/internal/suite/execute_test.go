@@ -45,7 +45,9 @@ func migrate(t *testing.T, pool *pgxpool.Pool) {
 	if err := app.Migrate(context.Background(), pool, slog.Default()); err != nil {
 		t.Fatalf("migrate schema: %v", err)
 	}
-	for _, table := range []string{"webhook_events", "pr_comments", "artifacts", "test_results", "runs", "registered_apps"} {
+	for _, table := range []string{"run_plan_resolutions", "plan_approvals", "plan_versions", "plans",
+		"corpus_behaviors", "corpus_learnings",
+		"webhook_events", "pr_comments", "artifacts", "test_results", "runs", "registered_apps"} {
 		if _, err := pool.Exec(context.Background(), "delete from "+table); err != nil {
 			t.Fatalf("clear %s: %v", table, err)
 		}

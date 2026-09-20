@@ -191,6 +191,10 @@ type webhookPayload struct {
 		HTMLURL      string `json:"html_url"`
 		Conclusion   string `json:"conclusion"`
 		Event        string `json:"event"`
+		PullRequests []struct {
+			ID     int64 `json:"id"`
+			Number int   `json:"number"`
+		} `json:"pull_requests"`
 	} `json:"workflow_run"`
 }
 
@@ -212,11 +216,24 @@ func seedFromWebhook(a app.App, delivery string, raw []byte, payload webhookPayl
 		RunNumber:      payload.WorkflowRun.RunNumber,
 		HeadSHA:        payload.WorkflowRun.HeadSHA,
 		HeadBranch:     payload.WorkflowRun.HeadBranch,
+		PRNumber:       webhookPR(payload),
 		TriggerSource:  TriggerWebhook,
 		SignatureValid: true,
 		Payload:        raw,
 		Enqueue:        accepts(payload),
 	}
+}
+
+// webhookPR extracts the first PR number attached to a workflow_run
+// delivery (0 when the payload carries none — the derive job's own PR
+// resolution by head SHA is the fallback).
+func webhookPR(p webhookPayload) int {
+	for _, pr := range p.WorkflowRun.PullRequests {
+		if pr.Number > 0 {
+			return pr.Number
+		}
+	}
+	return 0
 }
 
 // matcher pairs a registered app with its compiled display_title filter (the

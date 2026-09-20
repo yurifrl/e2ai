@@ -15,6 +15,7 @@ import (
 	"time"
 
 	"github.com/NSXBet/e2ai/api/internal/app"
+	"github.com/NSXBet/e2ai/api/internal/derive"
 	"github.com/NSXBet/e2ai/api/internal/ingest"
 	"github.com/NSXBet/e2ai/api/internal/platform/config"
 	"github.com/NSXBet/e2ai/api/internal/platform/github"
@@ -23,6 +24,7 @@ import (
 	"github.com/NSXBet/e2ai/api/internal/platform/river"
 	"github.com/NSXBet/e2ai/api/internal/plans"
 	"github.com/NSXBet/e2ai/api/internal/report"
+	"github.com/jackc/pgx/v5"
 )
 
 func main() {
@@ -94,6 +96,13 @@ func run() error {
 		// spec oracle after each sync pass. A missing GitHub token leaves
 		// both mounted but inert — sync needs the contents API.
 		plans.AddWorkers(workers, pool.Pool, ghClient, logger)
+
+		// Derive tail (DERV-01/02): after each ingest-created run, resolve
+		// the changed paths and store derived draft plan versions through
+		// the plans draft-upsert seam. Never executes anything — drafts
+		// land in the approval queue (APPR-01). Inert without a GitHub
+		// client (the worker reports the degraded PR resolution).
+		river.AddWorker[derive.DeriveDraftArgs](workers, derive.NewDeriver(pool.Pool, ghClient, logger))
 
 		// Rollout gate (INGE-03): the first pipeline job after ingest —
 		// polls the registered app's health_url until the deploy is live,
@@ -180,7 +189,7 @@ func run() error {
 			"WEBHOOK_SECRET":          cfg.WebhookSecret,
 			"GITHUB_TOKEN":            cfg.GitHubToken,
 			"E2AI_REPORT_LINK_SECRET": cfg.ReportLinkSecret,
-		}), newMux(dbHealth, webhook, runsSurface, plansSurface)),
+		}), newMux(dbHealth, webhook, runsSurface, plansSurface, pool, riverClient)),
 	)
 	server := &http.Server{
 		Addr:              ":" + strconv.Itoa(cfg.Port),
@@ -208,7 +217,7 @@ func run() error {
 
 // newMux returns the api HTTP surface: liveness/health, the GitHub webhook,
 // and (when postgres is up) the T11 runs + artifacts surface.
-func newMux(dbHealth func() bool, webhook http.Handler, runs *report.RunsHTTP, plans *plans.PlansHTTP) http.Handler {
+func newMux(dbHealth func() bool, webhook http.Handler, runs *report.RunsHTTP, plans *plans.PlansHTTP, pool *postgres.Pool, riverClient *river.Client) http.Handler {
 	mux := http.NewServeMux()
 	mux.HandleFunc("/healthz", func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
@@ -238,7 +247,68 @@ func newMux(dbHealth func() bool, webhook http.Handler, runs *report.RunsHTTP, p
 		// permission).
 		plans.Mount(mux)
 	}
+	if pool != nil && pool.Pool != nil {
+		// Plan resolution + derive endpoints (T8, APPR-01/DERV-01): the
+		// resolution record is the run-scoped evidence trail the executor's
+		// gate wrote; derive-draft is a manual re-derivation trigger.
+		mux.HandleFunc("GET /api/runs/{id}/plan-resolution", func(w http.ResponseWriter, r *http.Request) {
+			identity, ok := httpx.IdentityFromContext(r.Context())
+			switch {
+			case !ok:
+				httpErr(w, http.StatusUnauthorized, "unauthorized")
+				return
+			case !identity.HasPermission(httpx.RunViewPermission):
+				httpErr(w, http.StatusForbidden, "forbidden")
+				return
+			}
+			var resolution []byte
+			err := pool.Pool.QueryRow(r.Context(),
+				`select resolution from run_plan_resolutions where run_id = $1`,
+				r.PathValue("id")).Scan(&resolution)
+			if errors.Is(err, pgx.ErrNoRows) {
+				httpErr(w, http.StatusNotFound, "no plan resolution recorded for this run")
+				return
+			}
+			if err != nil {
+				httpErr(w, http.StatusInternalServerError, "read resolution failed")
+				return
+			}
+			w.Header().Set("Content-Type", "application/json")
+			_, _ = w.Write(resolution)
+		})
+		mux.HandleFunc("POST /api/runs/{id}/derive-draft", func(w http.ResponseWriter, r *http.Request) {
+			identity, ok := httpx.IdentityFromContext(r.Context())
+			switch {
+			case !ok:
+				httpErr(w, http.StatusUnauthorized, "unauthorized")
+				return
+			case !identity.HasPermission(httpx.RunEditPermission):
+				httpErr(w, http.StatusForbidden, "forbidden")
+				return
+			}
+			if riverClient == nil {
+				httpErr(w, http.StatusServiceUnavailable, "queue unavailable")
+				return
+			}
+			if _, err := riverClient.Insert(r.Context(),
+				derive.DeriveDraftArgs{RunID: r.PathValue("id"), PRNumber: 0},
+				derive.DeriveOpts()); err != nil {
+				httpErr(w, http.StatusInternalServerError, "enqueue derive failed")
+				return
+			}
+			w.Header().Set("Content-Type", "application/json")
+			w.WriteHeader(http.StatusAccepted)
+			_, _ = w.Write([]byte(`{"enqueued":true}`))
+		})
+	}
 	return mux
+}
+
+// httpErr writes the surface's JSON error shape.
+func httpErr(w http.ResponseWriter, status int, msg string) {
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(status)
+	_, _ = w.Write([]byte(`{"error":` + strconv.Quote(msg) + `}`))
 }
 
 func newLogger(cfg *config.Config) *slog.Logger {

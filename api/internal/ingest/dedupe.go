@@ -12,6 +12,7 @@ import (
 	"sync"
 
 	"github.com/NSXBet/e2ai/api/internal/app"
+	"github.com/NSXBet/e2ai/api/internal/derive"
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
@@ -97,6 +98,7 @@ type RunSeed struct {
 	RunNumber      int
 	HeadSHA        string
 	HeadBranch     string
+	PRNumber       int // PR attached to the workflow_run; 0 = none (derive falls back to head-SHA resolution)
 	TriggerSource  string // TriggerWebhook | TriggerReconcile
 	SignatureValid bool
 	Payload        []byte
@@ -153,6 +155,17 @@ func (s *Store) Ingest(ctx context.Context, seed RunSeed, queue JobEnqueuer) (Re
 	}
 	if _, err := queue.InsertTx(ctx, tx, WaitRolloutArgs{RunID: runID}, waitRolloutOpts()); err != nil {
 		return 0, fmt.Errorf("enqueue %s: %w", KindWaitRollout, err)
+	}
+	if seed.PRNumber > 0 {
+		// The deploy touched a PR (DERV-01): enqueue the derive job in the
+		// same tx so run creation and draft derivation enqueue commit
+		// atomically. When the PR is unknown the job's own head-SHA
+		// resolution covers it (reconcile seeds carry PRNumber 0).
+		if _, err := queue.InsertTx(ctx, tx,
+			derive.DeriveDraftArgs{RunID: runID.String(), PRNumber: seed.PRNumber},
+			derive.DeriveOpts()); err != nil {
+			return 0, fmt.Errorf("enqueue %s: %w", derive.KindDeriveDraft, err)
+		}
 	}
 	if err := tx.Commit(ctx); err != nil {
 		return 0, fmt.Errorf("commit ingest tx: %w", err)
