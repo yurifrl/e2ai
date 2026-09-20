@@ -1,0 +1,179 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "https://nsxbet.com/schemas/admin.module.schema.json",
+  "title": "Admin Module Manifest",
+  "description": "Schema for admin.module.json files that define module metadata for the NSXBet Admin Platform.",
+  "type": "object",
+  "required": ["id", "title", "description", "routeBase"],
+  "additionalProperties": false,
+  "properties": {
+    "$schema": {
+      "type": "string",
+      "description": "JSON Schema reference for IDE validation."
+    },
+    "id": {
+      "type": "string",
+      "description": "Unique identifier for the module (e.g., \"@admin/tasks\").",
+      "pattern": "^@admin/.+$",
+      "minLength": 1
+    },
+    "title": {
+      "$ref": "#/$defs/localizedField",
+      "description": "Human-readable title (localized per locale)."
+    },
+    "description": {
+      "$ref": "#/$defs/localizedField",
+      "description": "Description of what the module does (localized per locale)."
+    },
+    "routeBase": {
+      "type": "string",
+      "description": "Base route where module is mounted (e.g., \"/tasks\").",
+      "pattern": "^/"
+    },
+    "category": {
+      "type": "string",
+      "description": "Category for navigation grouping (e.g., \"Tools\", \"Customer\")."
+    },
+    "icon": {
+      "type": "string",
+      "description": "Lucide icon name in kebab-case (e.g., \"users\", \"clipboard-list\")."
+    },
+    "keywords": {
+      "type": "array",
+      "items": { "type": "string" },
+      "description": "Keywords for search."
+    },
+    "navigationOrder": {
+      "type": "number",
+      "description": "Navigation order (lower = higher priority)."
+    },
+    "sdkVersion": {
+      "type": "string",
+      "description": "Optional in source; the Vite plugin injects this into module.manifest.json at build time."
+    },
+    "navigation": {
+      "type": "object",
+      "description": "Navigation configuration for the module.",
+      "required": ["style"],
+      "additionalProperties": false,
+      "properties": {
+        "style": {
+          "type": "string",
+          "enum": ["collapsible", "stacked"],
+          "description": "Navigation style: \"collapsible\" (default) or \"stacked\" (dedicated panel)."
+        },
+        "sections": {
+          "type": "array",
+          "description": "Sections for grouping commands in stacked mode.",
+          "items": {
+            "type": "object",
+            "required": ["id", "label"],
+            "additionalProperties": false,
+            "properties": {
+              "id": {
+                "type": "string",
+                "description": "Unique section identifier."
+              },
+              "label": {
+                "$ref": "#/$defs/localizedField",
+                "description": "Human-readable section label (localized)."
+              }
+            }
+          }
+        }
+      }
+    },
+    "commands": {
+      "type": "array",
+      "description": "Commands/actions available in this module.",
+      "items": {
+        "type": "object",
+        "required": ["id", "title", "route"],
+        "additionalProperties": false,
+        "properties": {
+          "id": {
+            "type": "string",
+            "description": "Unique identifier for the command within the module."
+          },
+          "title": {
+            "$ref": "#/$defs/localizedField",
+            "description": "Human-readable title (localized per locale)."
+          },
+          "route": {
+            "type": "string",
+            "description": "Route path for this command."
+          },
+          "icon": {
+            "type": "string",
+            "description": "Lucide icon name in kebab-case (e.g., \"clipboard-list\", \"file-text\")."
+          },
+          "keywords": {
+            "type": "array",
+            "items": { "type": "string" },
+            "description": "Keywords for search."
+          },
+          "section": {
+            "type": "string",
+            "description": "Section ID for grouping in stacked navigation."
+          }
+        }
+      }
+    },
+    "permissions": {
+      "type": "object",
+      "description": "Permission configuration for the module.",
+      "additionalProperties": false,
+      "properties": {
+        "view": {
+          "type": "array",
+          "items": { "type": "string" },
+          "description": "Permissions required to view the module."
+        },
+        "edit": {
+          "type": "array",
+          "items": { "type": "string" },
+          "description": "Permissions required to edit within the module."
+        },
+        "delete": {
+          "type": "array",
+          "items": { "type": "string" },
+          "description": "Permissions required to delete within the module."
+        },
+        "dangerous": {
+          "type": "array",
+          "items": { "type": "string" },
+          "description": "Dangerous permissions that require extra confirmation."
+        }
+      }
+    },
+    "owners": {
+      "type": "object",
+      "description": "Module ownership information.",
+      "additionalProperties": false,
+      "properties": {
+        "team": {
+          "type": "string",
+          "description": "Team responsible for the module."
+        },
+        "supportChannel": {
+          "type": "string",
+          "description": "Support channel (e.g., Slack channel like \"#platform-support\")."
+        }
+      }
+    }
+  },
+  "$defs": {
+    "localizedField": {
+      "type": "object",
+      "description": "Localized string value — one string per supported locale.",
+      "required": ["en-US", "pt-BR", "es", "ro"],
+      "additionalProperties": false,
+      "properties": {
+        "en-US": { "type": "string" },
+        "pt-BR": { "type": "string" },
+        "es": { "type": "string" },
+        "ro": { "type": "string" }
+      }
+    }
+  }
+}

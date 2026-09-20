@@ -1,0 +1,6 @@
+/* Brasa Design System from the centralized package */
+@import '@nsxbet/admin-ui/styles.css';
+
+@tailwind base;
+@tailwind components;
+@tailwind utilities;

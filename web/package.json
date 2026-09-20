@@ -1,0 +1,29 @@
+{
+  "name": "e2ai-admin",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "vite --port 3005",
+    "build": "tsc && vite build",
+    "validate:manifest": "bun scripts/validate-manifest.ts"
+  },
+  "dependencies": {
+    "@nsxbet/admin-sdk": "^0.14.0",
+    "@nsxbet/admin-ui": "^0.6.0",
+    "react": "^18.3.1",
+    "react-dom": "^18.3.1",
+    "react-router-dom": "^6.28.0"
+  },
+  "devDependencies": {
+    "@types/react": "^18.3.12",
+    "@types/react-dom": "^18.3.1",
+    "@vitejs/plugin-react": "^4.3.4",
+    "ajv": "^8.17.1",
+    "autoprefixer": "^10.4.21",
+    "postcss": "^8.5.6",
+    "tailwindcss": "^3.4.17",
+    "typescript": "^5.6.3",
+    "vite": "^6.0.1"
+  }
+}

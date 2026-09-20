@@ -1,0 +1,71 @@
+{
+  "$schema": "https://raw.githubusercontent.com/NSXBet/admin/main/packages/admin-sdk/schemas/admin.module.schema.json",
+  "id": "@admin/e2ai",
+  "title": {
+    "en-US": "QA Runs",
+    "pt-BR": "Execuções de QA",
+    "es": "Ejecuciones de QA",
+    "ro": "Rulări QA"
+  },
+  "description": {
+    "en-US": "E2AI — deterministic e2e QA runs for bet-app web: runs, verdicts and live reports.",
+    "pt-BR": "E2AI — execuções de QA determinísticas do bet-app web: runs, vereditos e relatórios.",
+    "es": "E2AI — ejecuciones de QA deterministas de bet-app web: runs, veredictos e informes.",
+    "ro": "E2AI — rulări QA deterministe pentru bet-app web: rulări, verdicte și rapoarte."
+  },
+  "routeBase": "/e2ai",
+  "category": "Quality",
+  "icon": "shield-check",
+  "keywords": [
+    "qa",
+    "e2e",
+    "playwright",
+    "runs",
+    "verdict",
+    "report"
+  ],
+  "navigationOrder": 50,
+  "navigation": {
+    "style": "stacked",
+    "sections": [
+      {
+        "id": "operations",
+        "label": {
+          "en-US": "Operations",
+          "pt-BR": "Operações",
+          "es": "Operaciones",
+          "ro": "Operațiuni"
+        }
+      }
+    ]
+  },
+  "commands": [
+    {
+      "id": "runs",
+      "title": {
+        "en-US": "Runs",
+        "pt-BR": "Execuções",
+        "es": "Ejecuciones",
+        "ro": "Rulări"
+      },
+      "route": "/e2ai/runs",
+      "icon": "list",
+      "section": "operations",
+      "keywords": [
+        "runs",
+        "e2e",
+        "playwright",
+        "verdict"
+      ]
+    }
+  ],
+  "permissions": {
+    "view": [
+      "admin.e2ai.view"
+    ]
+  },
+  "owners": {
+    "team": "QA Engineering",
+    "supportChannel": "#qa-engineering"
+  }
+}
