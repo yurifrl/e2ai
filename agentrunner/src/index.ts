@@ -54,7 +54,21 @@ export {
   parseDecision,
   LoopConfigError,
 } from "./loop.js";
-export type { Decision, EvidenceRef, ArtifactPaths, CaptureResult, LoopDeps, StepContext, StepExecutor, StepVerifier, VerifyInput } from "./loop.js";
+export type { Decision, EvidenceRef, ArtifactPaths, CaptureResult, LoopDeps, StepVerifier, VerifyInput } from "./loop.js";
+
+export {
+  parseSurface,
+  selectDriver,
+  InfraFlakeError,
+  SurfaceConfigError,
+} from "./surface.js";
+export type { Surface, SurfaceDriver } from "./surface.js";
+export { WebDriver } from "./driver/web.js";
+export type { WebDriverDeps } from "./driver/web.js";
+export { AndroidDriver } from "./driver/maestro-android.js";
+export type { AndroidDriverDeps } from "./driver/maestro-android.js";
+export { IOSDriver } from "./driver/simctl-ios.js";
+export type { IOSDriverDeps } from "./driver/simctl-ios.js";
 
 export { Sandbox, SandboxConfigError, EgressViolation, sandboxOptionsFromEnv, assertNavigationAllowed, originOf, assertNoAppCredentials, isCredentialShapedKey } from "./sandbox.js";
 export type { SandboxOptions } from "./sandbox.js";

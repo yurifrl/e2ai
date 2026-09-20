@@ -1,10 +1,16 @@
-// loop.ts — the agentic loop skeleton (Phase 3 T3):
-//   capture (Playwright a11y snapshot + screenshot → artifacts dir)
+// loop.ts — the agentic loop skeleton (Phase 3 T3, Phase 4 T3 seam refactor):
+//   capture (SurfaceDriver.observe + screenshot/video → artifacts dir)
 //   → decide (gateway call producing a JSON action)
-//   → act (executor injected — interface only in this task; T5 lands the
-//     locator-first navigator)
+//   → act (driver performs step.action on the device — Playwright page for
+//     web via driver/web.ts, maestro for android, simctl for ios)
 //   → verify (optional injected verifier; T6 lands the vision judge)
 //   → append step via api.ts → heartbeat (409 ⇒ KilledError ⇒ clean exit).
+//
+// The loop is surface-agnostic: all device access goes through the
+// SurfaceDriver seam (surface.ts). The concrete driver is selected once at
+// startup from E2AI_SURFACE (locked vocabulary web | android | ios,
+// zero-default web) via selectDriver. Playwright, adb/maestro, and xcrun
+// simctl never leak into this file.
 //
 // Evidence artifacts land under $E2AI_ARTIFACTS_DIR/<run id>/agents/<session
 // id>/ — the SAME root layout as deterministic runs (suite/execute.go mounts
@@ -16,13 +22,18 @@
 
 import { mkdir, writeFile } from "node:fs/promises";
 import { join, relative } from "node:path";
-import type { Page } from "playwright";
 import type { Usage } from "./gateway.js";
 import { chat, type ResolvedGateway } from "./gateway.js";
 import type { AgentStep, AgentApi } from "./api.js";
 import { Budget, BudgetExhaustedError } from "./budget.js";
 import { buildEvidenceFence } from "./fences.js";
 import { ApiError, KilledError } from "./api.js";
+import {
+  parseSurface,
+  selectDriver,
+  type CaptureContext,
+  type SurfaceDriver,
+} from "./surface.js";
 
 export class LoopConfigError extends Error {
   constructor(message: string) {
@@ -42,6 +53,7 @@ export interface ArtifactPaths {
   runDir: string;
   agentDir: string;
   screenshotsDir: string;
+  videosDir: string;
   a11yDir: string;
 }
 
@@ -53,36 +65,36 @@ export function artifactPaths(artifactsDir: string, runId: string, sessionId: st
     runDir,
     agentDir,
     screenshotsDir: join(agentDir, "screenshots"),
+    videosDir: join(agentDir, "videos"),
     a11yDir: join(agentDir, "a11y"),
   };
 }
 
 export interface CaptureResult {
-  /** Playwright accessibility snapshot tree (a11y grounding, never pixels). */
+  /** Driver accessibility observation tree (a11y grounding, never pixels). */
   a11y: unknown;
   evidence: EvidenceRef[];
 }
 
-/** Capture pre-action evidence: a11y snapshot + screenshot, both persisted. */
-export async function capture(page: Page, paths: ArtifactPaths, idx: number): Promise<CaptureResult> {
-  await mkdir(paths.screenshotsDir, { recursive: true });
+/** Capture pre-action evidence through the seam: driver observation (a11y)
+ * + screenshot, both persisted by the loop (surface-agnostic plumbing). */
+export async function capture(
+  driver: SurfaceDriver,
+  paths: ArtifactPaths,
+  idx: number,
+): Promise<CaptureResult> {
   await mkdir(paths.a11yDir, { recursive: true });
 
-  // mode:"ai" emits element refs ([ref=eN]) — the refs locator-first
-  // navigation (T5) consumes. Page data: untrusted until fenced.
-  const snapshot = await page.ariaSnapshotJSON({ mode: "ai" });
+  // Driver observation: untrusted device/page data until fenced.
+  const { a11y } = await driver.observe();
   const a11yPath = join(paths.a11yDir, `step-${idx}.json`);
-  await writeFile(a11yPath, JSON.stringify(snapshot, null, 2), "utf8");
+  await writeFile(a11yPath, JSON.stringify(a11y, null, 2), "utf8");
 
-  const screenshotPath = join(paths.screenshotsDir, `step-${idx}.png`);
-  await page.screenshot({ path: screenshotPath });
+  const screenshotRefs = await driver.capture("screenshot", { paths, idx });
 
   return {
-    a11y: snapshot,
-    evidence: [
-      { kind: "a11y", path: relative(paths.runDir, a11yPath) },
-      { kind: "screenshot", path: relative(paths.runDir, screenshotPath) },
-    ],
+    a11y,
+    evidence: [{ kind: "a11y", path: relative(paths.runDir, a11yPath) }, ...screenshotRefs],
   };
 }
 
@@ -110,12 +122,6 @@ export function parseDecision(content: string): Decision {
   return parsed as Decision;
 }
 
-export interface StepExecutor {
-  /** Perform the decided action on the page. Locator-first policy lives in
-   * the T5 navigator; evidence refs are relative to the run dir. */
-  act(page: Page, decision: Decision, ctx: { runDir: string; idx: number }): Promise<{ action: unknown; evidence: EvidenceRef[] }>;
-}
-
 export interface VerifyInput {
   decision: Decision;
   action: unknown;
@@ -129,7 +135,11 @@ export interface StepVerifier {
 }
 
 export interface LoopDeps {
-  page: Page;
+  /** Concrete driver. Omit to select from E2AI_SURFACE (default "web") via
+   * selectDriver — the env-driven path android/ios wiring uses. */
+  driver?: SurfaceDriver;
+  /** Process env override (tests); drivers + surface selection read it. */
+  env?: NodeJS.ProcessEnv;
   gateway: ResolvedGateway;
   api: AgentApi;
   budget: Budget;
@@ -138,7 +148,6 @@ export interface LoopDeps {
   sessionId: string;
   runId: string;
   artifactsDir: string;
-  executor: StepExecutor;
   verify?: StepVerifier;
   systemPrompt: string;
   /** approved plan steps for this session; step i is presented at idx i. */
@@ -147,70 +156,75 @@ export interface LoopDeps {
   hardStepBound?: number;
 }
 
-export interface StepContext {
-  idx: number;
-  decision: Decision;
-  usage: Usage;
-  costMillicents: number;
-}
-
 export async function runLoop(deps: LoopDeps): Promise<void> {
-  const { page, gateway, api, budget, sessionId, runId, artifactsDir } = deps;
+  const { gateway, api, budget, sessionId, runId, artifactsDir } = deps;
+  const env = deps.env ?? process.env;
   const paths = artifactPaths(artifactsDir, runId, sessionId);
   const hardBound = deps.hardStepBound ?? 10_000;
 
-  for (let idx = 0; idx < hardBound; idx++) {
-    budget.beginStep();
-    // Heartbeat before long actions (screenshot + LLM), per RESEARCH loop skeleton.
-    await api.heartbeat(sessionId);
+  // One driver per session: selected once from the locked surface vocabulary
+  // (E2AI_SURFACE, zero-default "web"), launched before the first step, and
+  // torn down when the loop ends — success, error, or terminal budget stop.
+  const driver = deps.driver ?? selectDriver(parseSurface(env.E2AI_SURFACE), env);
+  try {
+    await driver.launch({ env });
 
-    const cap = await capture(page, paths, idx);
+    for (let idx = 0; idx < hardBound; idx++) {
+      budget.beginStep();
+      // Heartbeat before long actions (observation + LLM), per RESEARCH loop skeleton.
+      await api.heartbeat(sessionId);
 
-    const planStep = deps.planSteps?.[idx];
-    const userMessage = [
-      `Plan step ${idx}: ${JSON.stringify(planStep ?? null)}`,
-      buildEvidenceFence("a11y_snapshot", cap.a11y),
-    ].join("\n\n");
+      const cap = await capture(driver, paths, idx);
 
-    const result = await chat(gateway, deps.role, [
-      { role: "system", content: deps.systemPrompt },
-      { role: "user", content: userMessage },
-    ]);
-    const decision = parseDecision(result.content);
+      const planStep = deps.planSteps?.[idx];
+      const userMessage = [
+        `Plan step ${idx}: ${JSON.stringify(planStep ?? null)}`,
+        buildEvidenceFence("a11y_snapshot", cap.a11y),
+      ].join("\n\n");
 
-    if (decision.kind === "done") {
+      const result = await chat(gateway, deps.role, [
+        { role: "system", content: deps.systemPrompt },
+        { role: "user", content: userMessage },
+      ]);
+      const decision = parseDecision(result.content);
+
+      if (decision.kind === "done") {
+        const cost = budget.recordStep(result.model, result.usage);
+        await appendStep(api, sessionId, {
+          idx,
+          kind: "observe",
+          decision: { ...decision, verify: null },
+          action: { done: true },
+          evidence: cap.evidence,
+          usage: result.usage,
+          costMillicents: cost,
+        });
+        return;
+      }
+
+      const performed = await driver.act(decision);
+
+      let verdict: unknown = null;
+      if (deps.verify) {
+        verdict = await deps.verify.verify({ decision, action: performed.action, evidence: performed.evidence });
+      }
+
       const cost = budget.recordStep(result.model, result.usage);
       await appendStep(api, sessionId, {
         idx,
-        kind: "observe",
-        decision: { ...decision, verify: null },
-        action: { done: true },
-        evidence: cap.evidence,
+        kind: decision.kind,
+        decision: { ...decision, verify: verdict },
+        action: performed.action,
+        evidence: [...cap.evidence, ...performed.evidence],
         usage: result.usage,
         costMillicents: cost,
       });
-      return;
     }
-
-    const performed = await deps.executor.act(page, decision, { runDir: paths.runDir, idx });
-
-    let verdict: unknown = null;
-    if (deps.verify) {
-      verdict = await deps.verify.verify({ decision, action: performed.action, evidence: performed.evidence });
-    }
-
-    const cost = budget.recordStep(result.model, result.usage);
-    await appendStep(api, sessionId, {
-      idx,
-      kind: decision.kind,
-      decision: { ...decision, verify: verdict },
-      action: performed.action,
-      evidence: [...cap.evidence, ...performed.evidence],
-      usage: result.usage,
-      costMillicents: cost,
-    });
+    throw new BudgetExhaustedError(`hard step bound ${hardBound} reached without a done decision`);
+  } finally {
+    // Best-effort: teardown failures never mask the loop's own outcome.
+    await driver.teardown().catch(() => {});
   }
-  throw new BudgetExhaustedError(`hard step bound ${hardBound} reached without a done decision`);
 }
 
 async function appendStep(
