@@ -1,0 +1,71 @@
+# Local-dev values for the shared NSX `kubernetes` chart (OCI subchart, so values
+# live under the `kubernetes:` key). Mirrors incidents-admin/local/values.yaml but
+# for the e2ai tilt stack on orbstack: istio OFF, no AWS SecretsManager, no
+# crossplane infra. The env comes from the local `e2ai-env` Secret (built by
+# local/env-to-secret.sh from the .env layers) via `envFrom`, replacing
+# SecretsManager. Images are `<ecr>/<name>` built locally by Tilt (Wave 1 wires
+# docker_build + helm onto this file), so `version: latest` is just a tag Tilt
+# overrides.
+#
+# Only the apps this repo builds live here (api, runner). Local-only third-party
+# pods (postgres, the prebuilt admin-bff image) don't fit the chart's
+# `<ecr>/<name>:<version>` image model, so they're plain manifests in
+# local/infra.yaml.
+kubernetes:
+  base:
+    sourceRepo:
+      name: e2ai
+      org: NSXBet
+    containerRegistry:
+      url: 492684252576.dkr.ecr.us-east-1.amazonaws.com
+    deployConfig:
+      environment: local
+      namespace: e2ai
+      version: latest
+      # orbstack nodes match the host arch (Apple Silicon). The chart always emits
+      # a kubernetes.io/arch nodeSelector; on an Intel host set this to linux/amd64.
+      platform: linux/arm64
+      service:
+        istio: false
+    metadata:
+      team: sre
+
+  apps:
+    # e2ai api. DB is the local postgres pod (infra.yaml); the rest of the env
+    # (GITHUB_TOKEN, WEBHOOK_SECRET) comes from e2ai-env.
+    - name: e2ai-api
+      kind: deployment
+      replicas: 1
+      imagePullPolicy: IfNotPresent
+      envFrom:
+        secretName: e2ai-env
+      envs:
+        - { name: DATABASE_URL, value: "postgres://e2ai:e2ai@postgres:5432/e2ai?sslmode=disable" }
+      resources:
+        requests: { cpu: 50m, memory: 64Mi }
+        limits: { cpu: 500m, memory: 512Mi }
+      service:
+        istio: false
+        healthcheck:
+          path: /healthz
+          port: 8082
+          initialDelaySeconds: 3
+          periodSeconds: 3
+          timeoutSeconds: 5
+        ports:
+          - { containerPort: 8082, name: http }
+
+    # e2ai runner: drains only the River "runner" queue (checkout, playwright
+    # run, artifact store). No HTTP surface, so no ports/healthcheck.
+    - name: e2ai-runner
+      kind: deployment
+      replicas: 1
+      imagePullPolicy: IfNotPresent
+      envFrom:
+        secretName: e2ai-env
+      envs:
+        - { name: DATABASE_URL, value: "postgres://e2ai:e2ai@postgres:5432/e2ai?sslmode=disable" }
+      resources:
+        # Playwright + a chromium head are memory-hungry; give the runner headroom.
+        requests: { cpu: 250m, memory: 512Mi }
+        limits: { cpu: 2000m, memory: 2Gi }

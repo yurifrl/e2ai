@@ -1,0 +1,105 @@
+# Local-dev-only infra that doesn't fit a chart image model:
+#   - postgres: a throwaway local DB (staging/prod use shared RDS).
+#   - admin-bff: a prebuilt, sha-pinned external image (the shell's BFF).
+# Applied directly by the Tiltfile. Namespace `e2ai`.
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: postgres-data
+  namespace: e2ai
+spec:
+  accessModes: ["ReadWriteOnce"]
+  resources:
+    requests:
+      storage: 1Gi
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: postgres
+  namespace: e2ai
+spec:
+  replicas: 1
+  strategy: { type: Recreate }
+  selector:
+    matchLabels: { app: postgres }
+  template:
+    metadata:
+      labels: { app: postgres }
+    spec:
+      containers:
+        - name: postgres
+          image: postgres:16-alpine
+          ports:
+            - containerPort: 5432
+          env:
+            - { name: POSTGRES_DB, value: "e2ai" }
+            - { name: POSTGRES_USER, value: "e2ai" }
+            - { name: POSTGRES_PASSWORD, value: "e2ai" }
+            - { name: PGDATA, value: /var/lib/postgresql/data/pgdata }
+          readinessProbe:
+            exec:
+              command: ["pg_isready", "-U", "e2ai", "-d", "e2ai"]
+            initialDelaySeconds: 2
+            periodSeconds: 2
+          volumeMounts:
+            - { name: data, mountPath: /var/lib/postgresql/data }
+      volumes:
+        - name: data
+          persistentVolumeClaim:
+            claimName: postgres-data
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: postgres
+  namespace: e2ai
+spec:
+  selector: { app: postgres }
+  ports:
+    - port: 5432
+      targetPort: 5432
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: admin-bff
+  namespace: e2ai
+spec:
+  replicas: 1
+  selector:
+    matchLabels: { app: admin-bff }
+  template:
+    metadata:
+      labels: { app: admin-bff }
+    spec:
+      containers:
+        - name: admin-bff
+          # prebuilt house BFF image (supports identity-header injection)
+          image: 492684252576.dkr.ecr.us-east-1.amazonaws.com/admin-bff-http@sha256:1d62226bc40054ef868d96c3aa297e280d14a0b41f982097752fb949b14ee4b7
+          args: ["http"]
+          ports:
+            - containerPort: 8080
+          envFrom:
+            - secretRef: { name: e2ai-env }
+          readinessProbe:
+            httpGet: { path: /health, port: 8080 }
+            initialDelaySeconds: 3
+            periodSeconds: 3
+          volumeMounts:
+            - { name: config, mountPath: /app/config }
+      volumes:
+        - name: config
+          configMap:
+            name: admin-bff-config
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: admin-bff
+  namespace: e2ai
+spec:
+  selector: { app: admin-bff }
+  ports:
+    - port: 8080
+      targetPort: 8080

@@ -1,0 +1,55 @@
+# admin-bff config for e2ai staging (env overlay: real Okta issuer, in-cluster
+# api backend). Same shape as config/admin-bff.yaml; Tiltfile picks the file via
+# ENV=staging.
+nsf:
+  http:
+    server:
+      port: 8080
+      read-timeout: 60
+      write-timeout: 60
+      idle-timeout: 120
+    cors:
+      allow-all-origins: false
+      allow-origins:
+        - "https://stg-admin.nsx.dev"
+      allow-credentials: true
+      allow-methods:
+        - GET
+        - POST
+        - PATCH
+        - DELETE
+        - OPTIONS
+      allow-headers:
+        - Authorization
+        - Content-Type
+        - X-Requested-With
+    logging:
+      level: "info"
+      colorful: false
+      timeFormat: "15:04:05"
+      redactedFields: "password,pass,token,secret"
+    audit:
+      enable: false
+      sensitive-keys:
+        - token
+        - secret
+        - password
+        - authorization
+        - cookie
+app:
+  server:
+    name: admin-bff
+  okta:
+    issuer-url: "https://flutterbrazil.okta.com"
+    scopes:
+      - openid
+      - profile
+      - email
+  backends:
+    - name: e2ai-api
+      host: e2ai-api   # in-cluster Service (kubernetes/ manifests, later phase)
+      port: 8082
+      protocol: http
+      router:
+        type: prefix
+        value: /e2ai

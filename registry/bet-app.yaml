@@ -1,0 +1,22 @@
+# APPS-01/02: bet-app registered as the first e2ai app. Seeded from registry/*.yaml
+# on boot; field names mirror the registered_apps DDL one-to-one. Verified facts
+# from bet-app: Release - Web run-name is "[BetWeb] Deploy to ${{ inputs.environment }}"
+# and envs staging/production/homol exist; the Checkly on_deploy workflow matches
+# on display_title, which is the same filter contract e2ai re-validates server-side.
+owner: NSXBet
+repo: bet-app
+workflow_name: Release - Web
+workflow_path: .github/workflows/remote_workflow_betweb.yaml
+environment: staging
+display_title_pattern: '[BetWeb] Deploy to staging'
+# Staging health endpoint for the rollout gate (INGE-03): poll until 200,
+# 2s interval, 15m budget; unknown/unset falls back to the fixed 5m wait.
+health_url: https://stg-bet-app.nsx.dev/healthz
+surfaces: ["web"]
+# Future phases (columns reserved in registered_apps):
+# plans_source: null
+# corpus_root: null
+# 1Password ref — plaintext secrets never stored in the registry.
+webhook_secret_ref: op://SRE Team/e2ai/github_webhook_secret
+# Sticky PR comment anchor (REPT-02): find-and-update by this marker.
+comment_marker: "<!-- e2ai:run:bet-app-web -->"

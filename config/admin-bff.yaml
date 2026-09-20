@@ -1,0 +1,61 @@
+# admin-bff config for e2ai local dev (mirrors incidents-admin's shape; backends
+# trimmed to what e2ai owns). The BFF terminates the user session (Okta wall) and
+# forwards /e2ai/* to the api, injecting the identity headers the api's httpx
+# middleware trusts.
+nsf:
+  http:
+    server:
+      port: 8080
+      read-timeout: 60
+      write-timeout: 60
+      idle-timeout: 120
+    cors:
+      allow-all-origins: false
+      allow-origins:
+        - "http://localhost:3005"   # e2ai web module (Wave 2)
+        - "http://localhost:3000"   # bet-app local
+      allow-credentials: true
+      allow-methods:
+        - GET
+        - POST
+        - PATCH
+        - DELETE
+        - OPTIONS
+      allow-headers:
+        - Authorization
+        - Content-Type
+        - X-Requested-With
+    logging:
+      level: "debug"
+      colorful: true
+      timeFormat: "15:04:05"
+      skipCaller: true
+      redactedFields: "password,pass,token,secret"
+    audit:
+      enable: false
+      sensitive-keys:
+        - token
+        - secret
+        - password
+        - authorization
+        - cookie
+app:
+  server:
+    name: admin-bff
+  # Identity injection: the BFF authenticates the shell session and forwards
+  # X-User/X-Permissions to backends (api httpx identity middleware consumes it).
+  okta:
+    issuer-url: "http://localhost:8080"   # dev stub; real issuer only in staging file
+    scopes:
+      - openid
+      - profile
+      - email
+  # Router prefix table — one backend per downstream service.
+  backends:
+    - name: e2ai-api
+      host: host.docker.internal   # tilt api port-forward on the host (:8082)
+      port: 8082
+      protocol: http
+      router:
+        type: prefix
+        value: /e2ai
