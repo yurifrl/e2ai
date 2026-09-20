@@ -86,14 +86,18 @@ func (w *Worker) logger() *slog.Logger {
 }
 
 // evidenceRow is the minimal test_results projection the verdict engine
-// needs: outcome (test-level enum), status (last attempt), attempt count.
+// needs: outcome (test-level enum), status (last attempt), attempt count,
+// plus the driver-typed classification and error message the INFRA_FLAKE
+// override reads (PLAT-04).
 type evidenceRow struct {
-	title      string
-	file       string
-	outcome    string
-	status     string
-	attempts   int32
-	durationMS int32
+	title          string
+	file           string
+	outcome        string
+	status         string
+	attempts       int32
+	durationMS     int32
+	classification string
+	errorMessage   string
 }
 
 // Work runs the report job:
@@ -179,7 +183,8 @@ func (w *Worker) enterReporting(ctx context.Context, id pgtype.UUID) error {
 // loadEvidence reads the run's test_results in stable order (file, title).
 func (w *Worker) loadEvidence(ctx context.Context, runID uuid.UUID) ([]evidenceRow, error) {
 	rows, err := w.Pool.Query(ctx, `
-		select title, file, outcome, status, attempts, duration_ms
+		select title, file, outcome, status, attempts, duration_ms,
+		       coalesce(classification, ''), coalesce(error_message, '')
 		from test_results
 		where run_id = $1
 		order by file, title
@@ -194,7 +199,7 @@ func (w *Worker) loadEvidence(ctx context.Context, runID uuid.UUID) ([]evidenceR
 		var r evidenceRow
 		var file pgtype.Text
 		if err := rows.Scan(&r.title, &file, &r.outcome, &r.status,
-			&r.attempts, &r.durationMS); err != nil {
+			&r.attempts, &r.durationMS, &r.classification, &r.errorMessage); err != nil {
 			return nil, fmt.Errorf("scan test result: %w", err)
 		}
 		r.file = file.String
@@ -223,12 +228,20 @@ func evidence(rows []evidenceRow) []verdict.TestEvidence {
 		if r.status != "" {
 			atts = append(atts, verdict.Attempt{Retry: int(r.attempts - 1), Status: r.status})
 		}
-		out = append(out, verdict.TestEvidence{
+		ev := verdict.TestEvidence{
 			Title:    r.title,
 			File:     r.file,
 			Status:   r.outcome,
 			Attempts: atts,
-		})
+		}
+		// Driver-typed INFRA_FLAKE (PLAT-04): the mobile drivers store the
+		// failure class in the classification column; the error message is
+		// the boot-log citation that flows to the report/comment surfaces.
+		if verdict.IsInfraFlake(r.classification) {
+			ev.FailureClass = r.classification
+			ev.FailureDetail = r.errorMessage
+		}
+		out = append(out, ev)
 	}
 	return out
 }
@@ -314,6 +327,8 @@ func lower(v verdict.Verdict) string {
 		return "flaky"
 	case verdict.VerdictInfraError:
 		return "infra_error"
+	case verdict.VerdictInfraFlake:
+		return "infra_flake"
 	case verdict.VerdictInconclusive:
 		return "inconclusive"
 	default:

@@ -275,7 +275,7 @@ func topFailures(facts *runFacts) []failureRow {
 	}
 	var out []failureRow
 	for _, tv := range facts.Rep.Tests {
-		if tv.Verdict != verdict.VerdictFail {
+		if tv.Verdict != verdict.VerdictFail && tv.Verdict != verdict.VerdictInfraFlake {
 			continue
 		}
 		out = append(out, failureRow{
@@ -351,7 +351,7 @@ func renderComment(marker string, rep verdict.Report, failures []failureRow, lin
 	}
 	fmt.Fprintf(&b, "%d/%d passed · %d failed · %d flaky · %d skipped · %s\n\n",
 		rep.Counts.Pass, rep.Counts.Total(), rep.Counts.Fail, rep.Counts.Flaky,
-		rep.Counts.Inconclusive+rep.Counts.InfraError, durationStr(durationMS))
+		rep.Counts.Inconclusive+rep.Counts.InfraError+rep.Counts.InfraFlake, durationStr(durationMS))
 	b.WriteString(fmt.Sprintf("Full report: %s\n\n", link))
 	if len(failures) > 0 {
 		b.WriteString("### Top failures\n\n")

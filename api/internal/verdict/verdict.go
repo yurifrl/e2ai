@@ -1,5 +1,5 @@
 // Package verdict derives the fixed VERD-01 taxonomy (PASS / FAIL / FLAKY /
-// INFRA_ERROR / INCONCLUSIVE) from parsed Playwright evidence.
+// INFRA_ERROR / INFRA_FLAKE / INCONCLUSIVE) from parsed Playwright evidence.
 //
 // The package is pure: no I/O, no clocks, no exit codes. Verdicts derive
 // exclusively from evidence rows per RESEARCH.md § Verdict Rules. A Playwright
@@ -24,6 +24,7 @@ const (
 	VerdictFail         Verdict = "FAIL"
 	VerdictFlaky        Verdict = "FLAKY"
 	VerdictInfraError   Verdict = "INFRA_ERROR"
+	VerdictInfraFlake   Verdict = "INFRA_FLAKE"
 	VerdictInconclusive Verdict = "INCONCLUSIVE"
 )
 
@@ -70,6 +71,16 @@ type TestEvidence struct {
 	Status string
 	// Attempts are the recorded per-attempt rows, in execution order.
 	Attempts []Attempt
+	// FailureClass is the driver-typed failure class override (PLAT-04):
+	// "infra_flake" or "infra_flake:<subtype>" emitted by the mobile
+	// readiness probes when the device environment failed before the app
+	// could be exercised. Empty = no override; the deterministic REPT-02
+	// heuristics decide. Any non-infra_flake value is ignored (APP_BUG
+	// semantics stay with the heuristics).
+	FailureClass string
+	// FailureDetail is the driver's boot-log citation backing the
+	// failure-class override (e.g. the tail of the emulator boot log).
+	FailureDetail string
 }
 
 // RunInput is everything the verdict engine needs to derive a run verdict.
@@ -103,11 +114,14 @@ type Counts struct {
 	Fail         int `json:"fail"`
 	Flaky        int `json:"flaky"`
 	InfraError   int `json:"infra_error"`
+	InfraFlake   int `json:"infra_flake"`
 	Inconclusive int `json:"inconclusive"`
 }
 
 // Total is the number of evaluated tests behind the counts.
-func (c Counts) Total() int { return c.Pass + c.Fail + c.Flaky + c.InfraError + c.Inconclusive }
+func (c Counts) Total() int {
+	return c.Pass + c.Fail + c.Flaky + c.InfraError + c.InfraFlake + c.Inconclusive
+}
 
 // Report is the derived run-level verdict with per-test detail.
 type Report struct {
@@ -126,9 +140,11 @@ type Report struct {
 //     with the stage named in the note. Interrupted evidence means the runner
 //     crashed mid-suite: the unrecorded remainder makes any PASS/FAIL unsound.
 //  2. Any FAIL test → FAIL.
-//  3. No FAIL, any FLAKY → FLAKY.
-//  4. All evaluated tests PASS (at least one) → PASS.
-//  5. No tests ran / all skipped → INCONCLUSIVE.
+//  3. No FAIL, any INFRA_FLAKE → INFRA_FLAKE (PLAT-04: the device environment
+//     was unstable; the run carries no app-behavior signal).
+//  4. No FAIL/INFRA_FLAKE, any FLAKY → FLAKY.
+//  5. All evaluated tests PASS (at least one) → PASS.
+//  6. No tests ran / all skipped → INCONCLUSIVE.
 func Derive(in RunInput) Report {
 	rep := Report{Verdict: VerdictInfraError, Note: infraNote(in.Stage, "no parseable results.json")}
 
@@ -149,6 +165,8 @@ func Derive(in RunInput) Report {
 			rep.Counts.Flaky++
 		case VerdictInfraError:
 			rep.Counts.InfraError++
+		case VerdictInfraFlake:
+			rep.Counts.InfraFlake++
 		case VerdictInconclusive:
 			rep.Counts.Inconclusive++
 		}
@@ -161,6 +179,10 @@ func Derive(in RunInput) Report {
 			intStr(rep.Counts.InfraError) + " test(s); results incomplete"
 	case rep.Counts.Fail > 0:
 		rep.Verdict = VerdictFail
+	case rep.Counts.InfraFlake > 0:
+		rep.Verdict = VerdictInfraFlake
+		rep.Note = "execute: device environment unstable in " +
+			intStr(rep.Counts.InfraFlake) + " test(s); no app-behavior signal"
 	case rep.Counts.Flaky > 0:
 		rep.Verdict = VerdictFlaky
 	case rep.Counts.Pass > 0:
@@ -178,6 +200,19 @@ func Derive(in RunInput) Report {
 // evaluate maps one test's evidence to a verdict per the test-level table.
 func evaluate(t TestEvidence) TestVerdict {
 	tv := TestVerdict{ID: t.ID, Title: t.Title, File: t.File}
+
+	// Driver-typed failure-class override (PLAT-04): when the mobile driver
+	// already classified the failure as infra_flake, the device environment
+	// failed before the app could be exercised — the deterministic
+	// heuristics never see a fair error message, so the typed class wins.
+	// Anything the driver did NOT type as infra_flake keeps APP_BUG
+	// semantics and falls through to the evidence table below.
+	if IsInfraFlake(t.FailureClass) {
+		tv.Verdict = VerdictInfraFlake
+		tv.Class = ClassInfraFlake
+		tv.Reason = infraFlakeReason(t)
+		return tv
+	}
 
 	switch t.Status {
 	case StatusExpected:

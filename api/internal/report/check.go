@@ -43,5 +43,5 @@ func (p *Publisher) publishCheckRun(ctx context.Context, facts *runFacts, link s
 func checkRunSummary(rep verdict.Report) string {
 	return fmt.Sprintf("%d passed, %d failed, %d flaky, %d skipped — full report in the details link",
 		rep.Counts.Pass, rep.Counts.Fail, rep.Counts.Flaky,
-		rep.Counts.Inconclusive+rep.Counts.InfraError)
+		rep.Counts.Inconclusive+rep.Counts.InfraError+rep.Counts.InfraFlake)
 }

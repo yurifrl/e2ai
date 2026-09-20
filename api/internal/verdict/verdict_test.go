@@ -1,6 +1,9 @@
 package verdict
 
-import "testing"
+import (
+	"strings"
+	"testing"
+)
 
 // All table rows cite real values from the T2 fixture
 // (api/internal/suite/testdata/results.json — Playwright 1.58.2 JSON report).
@@ -130,6 +133,10 @@ func TestDeriveRunPrecedence(t *testing.T) {
 	skipped := mk("t4", "skipped", "fixture.spec.ts", StatusSkipped, Attempt{Status: AttemptSkipped})
 	interrupted := mk("t5", "crashed", "fixture.spec.ts", StatusUnexpected,
 		Attempt{Status: AttemptFailed}, Attempt{Status: AttemptInterrupted})
+	infraFlake := mk("t6", "boots the emulator", "fixture.spec.ts", StatusUnexpected,
+		Attempt{Status: AttemptFailed})
+	infraFlake.FailureClass = string(FailureClassInfraFlakeBoot)
+	infraFlake.FailureDetail = "bootstatus poll exceeded 90s: emulator never left the boot animation"
 
 	tests := []struct {
 		name    string
@@ -138,6 +145,7 @@ func TestDeriveRunPrecedence(t *testing.T) {
 		wantNt  string
 		pas, fa int
 		fl, ie  int
+		ifk     int
 		ic      int
 	}{
 		{
@@ -176,6 +184,22 @@ func TestDeriveRunPrecedence(t *testing.T) {
 			pas:  1, fa: 0, fl: 0, ie: 0, ic: 1,
 		},
 		{
+			// PLAT-04 Rule 3: no FAIL, any INFRA_FLAKE → INFRA_FLAKE; the
+			// device environment was unstable, no app-behavior signal.
+			name: "INFRA_FLAKE outranks FLAKY and PASS",
+			in:   RunInput{Stage: "execute", Results: []TestEvidence{infraFlake, flaky, pass}},
+			want: VerdictInfraFlake,
+			pas:  1, fa: 0, fl: 1, ie: 0, ifk: 1, ic: 0,
+		},
+		{
+			// Rule 2 still outranks the device layer: a real FAIL is a
+			// stronger signal than an unstable device alongside it.
+			name: "FAIL outranks INFRA_FLAKE",
+			in:   RunInput{Stage: "execute", Results: []TestEvidence{infraFlake, fail, pass}},
+			want: VerdictFail,
+			pas:  1, fa: 1, fl: 0, ie: 0, ifk: 1, ic: 0,
+		},
+		{
 			// Rule 5: no tests ran / all skipped → INCONCLUSIVE.
 			name: "all skipped is INCONCLUSIVE",
 			in:   RunInput{Stage: "execute", Results: []TestEvidence{skipped}},
@@ -201,12 +225,72 @@ func TestDeriveRunPrecedence(t *testing.T) {
 			}
 			if got.Counts.Pass != tt.pas || got.Counts.Fail != tt.fa ||
 				got.Counts.Flaky != tt.fl || got.Counts.InfraError != tt.ie ||
+				got.Counts.InfraFlake != tt.ifk ||
 				got.Counts.Inconclusive != tt.ic {
-				t.Errorf("counts = %+v, want pass=%d fail=%d flaky=%d infra=%d inconclusive=%d",
-					got.Counts, tt.pas, tt.fa, tt.fl, tt.ie, tt.ic)
+				t.Errorf("counts = %+v, want pass=%d fail=%d flaky=%d infra=%d infra_flake=%d inconclusive=%d",
+					got.Counts, tt.pas, tt.fa, tt.fl, tt.ie, tt.ifk, tt.ic)
 			}
 			if len(got.Tests) != len(tt.in.Results) {
 				t.Errorf("got %d test verdicts, want %d", len(got.Tests), len(tt.in.Results))
+			}
+		})
+	}
+}
+
+// TestInfraFlakeOverride (PLAT-04): the driver-typed failure class wins over
+// the deterministic heuristics only when it is an infra_flake value (exact or
+// subtype); anything else keeps APP_BUG semantics.
+func TestInfraFlakeOverride(t *testing.T) {
+	tests := []struct {
+		name       string
+		failClass  string
+		detail     string
+		want       Verdict
+		wantCls    Class
+		wantReason string // substring the reason must carry
+	}{
+		{
+			name:       "unqualified infra_flake class overrides the heuristics",
+			failClass:  string(FailureClassInfraFlake),
+			want:       VerdictInfraFlake,
+			wantCls:    ClassInfraFlake,
+			wantReason: "device environment unstable before the app could be exercised",
+		},
+		{
+			name:       "subtype-qualified class carries the subtype in the reason",
+			failClass:  string(FailureClassInfraFlakeBoot),
+			detail:     "emulator never left the boot animation",
+			want:       VerdictInfraFlake,
+			wantCls:    ClassInfraFlake,
+			wantReason: "probe: boot_timeout): emulator never left the boot animation",
+		},
+		{
+			// APP_BUG semantics: a driver class value outside the infra_flake
+			// vocabulary is ignored, the deterministic heuristics decide
+			// (an assertion failure here → test_gap).
+			name:      "non-infra_flake class value is ignored (APP_BUG semantics)",
+			failClass: "app_bug",
+			want:      VerdictFail,
+			wantCls:   ClassTestGap,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			in := mk("t1", "never got a fair device", "fixture.spec.ts", StatusUnexpected,
+				Attempt{Retry: 0, Status: AttemptFailed, Error: "expect(1).toBe(2) // Object.is equality"})
+			in.FailureClass = tt.failClass
+			in.FailureDetail = tt.detail
+
+			got := evaluate(in)
+			if got.Verdict != tt.want {
+				t.Errorf("verdict = %q, want %q (reason: %s)", got.Verdict, tt.want, got.Reason)
+			}
+			if got.Class != tt.wantCls {
+				t.Errorf("class = %q, want %q", got.Class, tt.wantCls)
+			}
+			if tt.wantReason != "" && !strings.Contains(got.Reason, tt.wantReason) {
+				t.Errorf("reason = %q, want it to contain %q", got.Reason, tt.wantReason)
 			}
 		})
 	}

@@ -25,7 +25,44 @@ const (
 	// CANNOT fire in P1 because P1 runs no agents; no heuristic below returns
 	// it, and classify() never produces it.
 	ClassAgentFlake Class = "agent_flake"
+	// ClassInfraFlake: the mobile/device layer failed before the app under
+	// test could be exercised (PLAT-04). Driver readiness probes classify
+	// boot/screenshot failures as infra_flake — the device environment was
+	// unstable, so the failure carries no signal about app behavior. Unlike
+	// ClassInfra (the whole run never got a fair environment), an infra_flake
+	// test can coexist with passing tests on the same run.
+	ClassInfraFlake Class = "infra_flake"
 )
+
+// Driver-typed failure-class vocabulary (PLAT-04, the locked INFRA_FLAKE
+// contract): TS drivers emit "infra_flake" — optionally subtype-qualified as
+// "infra_flake:<subtype>" — into the failure-class field of a step/test
+// result. The Go verdict engine reads it back verbatim; anything that is not
+// an infra_flake value keeps APP_BUG semantics (the deterministic heuristics
+// below decide).
+//
+// Known subtypes (drivers may add more; unknown subtypes still classify as
+// infra_flake):
+//
+//	boot_timeout      — device/emulator/simulator boot or bootstatus poll timed out
+//	device_offline    — the device dropped off adb/idb/simctl mid-session
+//	screenshot_failed — screenshot capture failed or produced an unusable frame
+//	probe_timeout     — a readiness probe (animation/network/render) never settled
+const (
+	FailureClassInfraFlake          = ClassInfraFlake // canonical, unqualified
+	FailureClassInfraFlakeBoot      = "infra_flake:boot_timeout"
+	FailureClassInfraFlakeOffline   = "infra_flake:device_offline"
+	FailureClassInfraFlakeShots     = "infra_flake:screenshot_failed"
+	FailureClassInfraFlakeProbe     = "infra_flake:probe_timeout"
+	FailureClassInfraFlakeStability = "infra_flake:unstable_frames"
+)
+
+// IsInfraFlake reports whether a driver-typed failure class is an
+// infra_flake value (the exact class or any subtype). The vocabulary is
+// lowercase-snake per the locked contract; the match is case-sensitive.
+func IsInfraFlake(fc string) bool {
+	return fc == string(FailureClassInfraFlake) || strings.HasPrefix(fc, string(FailureClassInfraFlake)+":")
+}
 
 // Deterministic error-pattern rules. Keywords are lowercase; messages are
 // lowercased before matching (Playwright messages carry ANSI noise that the
@@ -60,6 +97,32 @@ var assertionPatterns = []string{
 var mswMismatchPatterns = []string{
 	// playwright-msw / msw unhandled-request signatures.
 	"cannot find handler", "no handler", "unhandled request", "msw",
+}
+
+// maxFlakeReason caps the boot-log citation embedded in a test reason so the
+// report/comment surfaces stay readable; the full log lives in the step/
+// test-result attachments.
+const maxFlakeReason = 400
+
+// infraFlakeReason renders the plain-language reason for an infra_flake
+// test: subtype + the driver's boot-log citation (truncated).
+func infraFlakeReason(t TestEvidence) string {
+	sub := strings.TrimPrefix(t.FailureClass, string(FailureClassInfraFlake))
+	sub = strings.TrimPrefix(sub, ":")
+	detail := t.FailureDetail
+	if len(detail) > maxFlakeReason {
+		detail = detail[:maxFlakeReason] + "…"
+	}
+	if sub == "" && detail == "" {
+		return "device environment unstable before the app could be exercised"
+	}
+	if sub == "" {
+		return "device environment unstable before the app could be exercised: " + detail
+	}
+	if detail == "" {
+		return "device environment unstable (probe: " + sub + ")"
+	}
+	return "device environment unstable (probe: " + sub + "): " + detail
 }
 
 // Classify assigns a REPT-02 class to a failing (FAIL or FLAKY) test and
