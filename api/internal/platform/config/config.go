@@ -26,6 +26,9 @@ type Config struct {
 	// Auth: BFF-injected identity fallback for local dev (httpx middleware).
 	DevFallbackUser string
 
+	// Registry directory of app YAML definitions seeded on boot (APPS-01/02).
+	RegistryDir string
+
 	// Runner queue sizing for the river "runner" queue (cmd/e2ai-runner).
 	RunnerMaxWorkers int
 }
@@ -73,6 +76,7 @@ func Load() (*Config, error) {
 		Debug:            getEnvBool("DEBUG", false),
 		LogLevel:         logLevel,
 		DevFallbackUser:  getEnv("DEV_FALLBACK_USER", ""),
+		RegistryDir:      getEnv("REGISTRY_DIR", filepath.Join(repoRoot(), "registry")),
 		RunnerMaxWorkers: runnerMaxWorkers,
 	}, nil
 }

@@ -14,6 +14,7 @@ import (
 	"syscall"
 	"time"
 
+	"github.com/NSXBet/e2ai/api/internal/app"
 	"github.com/NSXBet/e2ai/api/internal/platform/config"
 	"github.com/NSXBet/e2ai/api/internal/platform/httpx"
 	"github.com/NSXBet/e2ai/api/internal/platform/postgres"
@@ -53,11 +54,14 @@ func run() error {
 		}
 	}()
 
-	// River default-queue client (webhook/report stages drain here). The schema
-	// migration runs with Wave 1; until then river.Start starts fine against an
-	// empty database.
+	// River default-queue client (webhook/report stages drain here). Schema
+	// migrations and registry seeding run first (T3): the client needs the
+	// river_* tables, workers need registered_apps.
 	var riverClient *river.Client
 	if pool != nil {
+		if err := app.Bootstrap(ctx, pool.Pool, logger, cfg.RegistryDir); err != nil {
+			return err
+		}
 		riverClient, err = river.DefaultClient(pool.Pool, 2)
 		if err != nil {
 			return err
