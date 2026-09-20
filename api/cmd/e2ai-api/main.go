@@ -94,9 +94,20 @@ func run() error {
 
 		// Report tail (VERD-01/SUIT-02): derives the run verdict from the
 		// evidence the runner stored, persists it with the summary counts,
-		// and completes the run. Needs no GitHub client (T10 mounts the
-		// comment/check-run publisher here), so it registers unconditionally.
-		river.AddWorker(workers, &report.Worker{Pool: pool.Pool, Logger: logger})
+		// and completes the run. When a GitHub token is present the T10
+		// publisher rides the job's Publisher seam: sticky PR comment +
+		// neutral check-run + signed report link. Without a token the job
+		// still runs (verdict persistence is independent of publishing).
+		reportWorker := &report.Worker{Pool: pool.Pool, Logger: logger}
+		if ghClient != nil {
+			reportWorker.Publisher = report.NewPublisher(
+				ghClient,
+				os.Getenv("E2AI_REPORT_BASE_URL"),
+				os.Getenv("E2AI_REPORT_LINK_SECRET"),
+				logger,
+			)
+		}
+		river.AddWorker(workers, reportWorker)
 
 		var periodic []*river.PeriodicJob
 		if ghClient != nil {
