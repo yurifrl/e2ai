@@ -1,0 +1,1 @@
+{"name":"e2ai-results-fixturegen","private":true,"description":"Generates the real Playwright results.json committed as api/internal/suite/testdata/results.json. See README.md.","scripts":{"gen":"playwright test --reporter=json"},"devDependencies":{"@playwright/test":"1.58.2"}}

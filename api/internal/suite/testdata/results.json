@@ -1,0 +1,325 @@
+{
+  "config": {
+    "configFile": "/Users/yuri/Workdir/Yuri/e2ai/api/internal/suite/fixturegen/playwright.config.ts",
+    "rootDir": "/Users/yuri/Workdir/Yuri/e2ai/api/internal/suite/fixturegen",
+    "forbidOnly": false,
+    "fullyParallel": false,
+    "globalSetup": null,
+    "globalTeardown": null,
+    "globalTimeout": 0,
+    "grep": {},
+    "grepInvert": null,
+    "maxFailures": 0,
+    "metadata": {
+      "actualWorkers": 1
+    },
+    "preserveOutput": "always",
+    "projects": [
+      {
+        "outputDir": "/Users/yuri/Workdir/Yuri/e2ai/api/internal/suite/fixturegen/test-results",
+        "repeatEach": 1,
+        "retries": 1,
+        "metadata": {
+          "actualWorkers": 1
+        },
+        "id": "",
+        "name": "",
+        "testDir": "/Users/yuri/Workdir/Yuri/e2ai/api/internal/suite/fixturegen",
+        "testIgnore": [],
+        "testMatch": [
+          "**/*.@(spec|test).?(c|m)[jt]s?(x)"
+        ],
+        "timeout": 30000
+      }
+    ],
+    "quiet": false,
+    "reporter": [
+      [
+        "json"
+      ]
+    ],
+    "reportSlowTests": {
+      "max": 5,
+      "threshold": 300000
+    },
+    "runAgents": "none",
+    "shard": null,
+    "tags": [],
+    "updateSnapshots": "missing",
+    "updateSourceMethod": "patch",
+    "version": "1.58.2",
+    "workers": 1,
+    "webServer": null
+  },
+  "suites": [
+    {
+      "title": "fixture.spec.ts",
+      "file": "fixture.spec.ts",
+      "column": 0,
+      "line": 0,
+      "specs": [
+        {
+          "title": "passes",
+          "ok": true,
+          "tags": [],
+          "tests": [
+            {
+              "timeout": 30000,
+              "annotations": [],
+              "expectedStatus": "passed",
+              "projectId": "",
+              "projectName": "",
+              "results": [
+                {
+                  "workerIndex": 0,
+                  "parallelIndex": 0,
+                  "status": "passed",
+                  "duration": 1,
+                  "errors": [],
+                  "stdout": [],
+                  "stderr": [],
+                  "retry": 0,
+                  "startTime": "2026-09-20T03:57:59.741Z",
+                  "annotations": [],
+                  "attachments": []
+                }
+              ],
+              "status": "expected"
+            }
+          ],
+          "id": "f50ffb23eefd99667046-f6ca7a37941598886397",
+          "file": "fixture.spec.ts",
+          "line": 7,
+          "column": 5
+        },
+        {
+          "title": "always fails",
+          "ok": false,
+          "tags": [],
+          "tests": [
+            {
+              "timeout": 30000,
+              "annotations": [],
+              "expectedStatus": "passed",
+              "projectId": "",
+              "projectName": "",
+              "results": [
+                {
+                  "workerIndex": 0,
+                  "parallelIndex": 0,
+                  "status": "failed",
+                  "duration": 1,
+                  "error": {
+                    "message": "Error: \u001b[2mexpect(\u001b[22m\u001b[31mreceived\u001b[39m\u001b[2m).\u001b[22mtoBe\u001b[2m(\u001b[22m\u001b[32mexpected\u001b[39m\u001b[2m) // Object.is equality\u001b[22m\n\nExpected: \u001b[32m2\u001b[39m\nReceived: \u001b[31m1\u001b[39m",
+                    "stack": "Error: \u001b[2mexpect(\u001b[22m\u001b[31mreceived\u001b[39m\u001b[2m).\u001b[22mtoBe\u001b[2m(\u001b[22m\u001b[32mexpected\u001b[39m\u001b[2m) // Object.is equality\u001b[22m\n\nExpected: \u001b[32m2\u001b[39m\nReceived: \u001b[31m1\u001b[39m\n    at /Users/yuri/Workdir/Yuri/e2ai/api/internal/suite/fixturegen/fixture.spec.ts:12:13",
+                    "location": {
+                      "file": "/Users/yuri/Workdir/Yuri/e2ai/api/internal/suite/fixturegen/fixture.spec.ts",
+                      "column": 13,
+                      "line": 12
+                    },
+                    "snippet": "  10 |\n  11 | test(\"always fails\", async () => {\n> 12 |   expect(1).toBe(2);\n     |             ^\n  13 | });\n  14 |\n  15 | // Attempt 1 fails, attempt 2 (retry) passes -> outcome \"flaky\"."
+                  },
+                  "errors": [
+                    {
+                      "location": {
+                        "file": "/Users/yuri/Workdir/Yuri/e2ai/api/internal/suite/fixturegen/fixture.spec.ts",
+                        "column": 13,
+                        "line": 12
+                      },
+                      "message": "Error: \u001b[2mexpect(\u001b[22m\u001b[31mreceived\u001b[39m\u001b[2m).\u001b[22mtoBe\u001b[2m(\u001b[22m\u001b[32mexpected\u001b[39m\u001b[2m) // Object.is equality\u001b[22m\n\nExpected: \u001b[32m2\u001b[39m\nReceived: \u001b[31m1\u001b[39m\n\n  10 |\n  11 | test(\"always fails\", async () => {\n> 12 |   expect(1).toBe(2);\n     |             ^\n  13 | });\n  14 |\n  15 | // Attempt 1 fails, attempt 2 (retry) passes -> outcome \"flaky\".\n    at /Users/yuri/Workdir/Yuri/e2ai/api/internal/suite/fixturegen/fixture.spec.ts:12:13"
+                    }
+                  ],
+                  "stdout": [],
+                  "stderr": [],
+                  "retry": 0,
+                  "startTime": "2026-09-20T03:57:59.752Z",
+                  "annotations": [],
+                  "attachments": [],
+                  "errorLocation": {
+                    "file": "/Users/yuri/Workdir/Yuri/e2ai/api/internal/suite/fixturegen/fixture.spec.ts",
+                    "column": 13,
+                    "line": 12
+                  }
+                },
+                {
+                  "workerIndex": 1,
+                  "parallelIndex": 0,
+                  "status": "failed",
+                  "duration": 3,
+                  "error": {
+                    "message": "Error: \u001b[2mexpect(\u001b[22m\u001b[31mreceived\u001b[39m\u001b[2m).\u001b[22mtoBe\u001b[2m(\u001b[22m\u001b[32mexpected\u001b[39m\u001b[2m) // Object.is equality\u001b[22m\n\nExpected: \u001b[32m2\u001b[39m\nReceived: \u001b[31m1\u001b[39m",
+                    "stack": "Error: \u001b[2mexpect(\u001b[22m\u001b[31mreceived\u001b[39m\u001b[2m).\u001b[22mtoBe\u001b[2m(\u001b[22m\u001b[32mexpected\u001b[39m\u001b[2m) // Object.is equality\u001b[22m\n\nExpected: \u001b[32m2\u001b[39m\nReceived: \u001b[31m1\u001b[39m\n    at /Users/yuri/Workdir/Yuri/e2ai/api/internal/suite/fixturegen/fixture.spec.ts:12:13",
+                    "location": {
+                      "file": "/Users/yuri/Workdir/Yuri/e2ai/api/internal/suite/fixturegen/fixture.spec.ts",
+                      "column": 13,
+                      "line": 12
+                    },
+                    "snippet": "  10 |\n  11 | test(\"always fails\", async () => {\n> 12 |   expect(1).toBe(2);\n     |             ^\n  13 | });\n  14 |\n  15 | // Attempt 1 fails, attempt 2 (retry) passes -> outcome \"flaky\"."
+                  },
+                  "errors": [
+                    {
+                      "location": {
+                        "file": "/Users/yuri/Workdir/Yuri/e2ai/api/internal/suite/fixturegen/fixture.spec.ts",
+                        "column": 13,
+                        "line": 12
+                      },
+                      "message": "Error: \u001b[2mexpect(\u001b[22m\u001b[31mreceived\u001b[39m\u001b[2m).\u001b[22mtoBe\u001b[2m(\u001b[22m\u001b[32mexpected\u001b[39m\u001b[2m) // Object.is equality\u001b[22m\n\nExpected: \u001b[32m2\u001b[39m\nReceived: \u001b[31m1\u001b[39m\n\n  10 |\n  11 | test(\"always fails\", async () => {\n> 12 |   expect(1).toBe(2);\n     |             ^\n  13 | });\n  14 |\n  15 | // Attempt 1 fails, attempt 2 (retry) passes -> outcome \"flaky\".\n    at /Users/yuri/Workdir/Yuri/e2ai/api/internal/suite/fixturegen/fixture.spec.ts:12:13"
+                    }
+                  ],
+                  "stdout": [],
+                  "stderr": [],
+                  "retry": 1,
+                  "startTime": "2026-09-20T03:58:00.425Z",
+                  "annotations": [],
+                  "attachments": [],
+                  "errorLocation": {
+                    "file": "/Users/yuri/Workdir/Yuri/e2ai/api/internal/suite/fixturegen/fixture.spec.ts",
+                    "column": 13,
+                    "line": 12
+                  }
+                }
+              ],
+              "status": "unexpected"
+            }
+          ],
+          "id": "f50ffb23eefd99667046-bd68f91cbcaac3bd5681",
+          "file": "fixture.spec.ts",
+          "line": 11,
+          "column": 5
+        },
+        {
+          "title": "flaky then passes",
+          "ok": true,
+          "tags": [],
+          "tests": [
+            {
+              "timeout": 30000,
+              "annotations": [],
+              "expectedStatus": "passed",
+              "projectId": "",
+              "projectName": "",
+              "results": [
+                {
+                  "workerIndex": 2,
+                  "parallelIndex": 0,
+                  "status": "failed",
+                  "duration": 2,
+                  "error": {
+                    "message": "Error: \u001b[2mexpect(\u001b[22m\u001b[31mreceived\u001b[39m\u001b[2m).\u001b[22mtoBe\u001b[2m(\u001b[22m\u001b[32mexpected\u001b[39m\u001b[2m) // Object.is equality\u001b[22m\n\nExpected: \u001b[32m2\u001b[39m\nReceived: \u001b[31m1\u001b[39m",
+                    "stack": "Error: \u001b[2mexpect(\u001b[22m\u001b[31mreceived\u001b[39m\u001b[2m).\u001b[22mtoBe\u001b[2m(\u001b[22m\u001b[32mexpected\u001b[39m\u001b[2m) // Object.is equality\u001b[22m\n\nExpected: \u001b[32m2\u001b[39m\nReceived: \u001b[31m1\u001b[39m\n    at /Users/yuri/Workdir/Yuri/e2ai/api/internal/suite/fixturegen/fixture.spec.ts:18:15",
+                    "location": {
+                      "file": "/Users/yuri/Workdir/Yuri/e2ai/api/internal/suite/fixturegen/fixture.spec.ts",
+                      "column": 15,
+                      "line": 18
+                    },
+                    "snippet": "  16 | test(\"flaky then passes\", async () => {\n  17 |   if (test.info().retry === 0) {\n> 18 |     expect(1).toBe(2);\n     |               ^\n  19 |   }\n  20 | });\n  21 |"
+                  },
+                  "errors": [
+                    {
+                      "location": {
+                        "file": "/Users/yuri/Workdir/Yuri/e2ai/api/internal/suite/fixturegen/fixture.spec.ts",
+                        "column": 15,
+                        "line": 18
+                      },
+                      "message": "Error: \u001b[2mexpect(\u001b[22m\u001b[31mreceived\u001b[39m\u001b[2m).\u001b[22mtoBe\u001b[2m(\u001b[22m\u001b[32mexpected\u001b[39m\u001b[2m) // Object.is equality\u001b[22m\n\nExpected: \u001b[32m2\u001b[39m\nReceived: \u001b[31m1\u001b[39m\n\n  16 | test(\"flaky then passes\", async () => {\n  17 |   if (test.info().retry === 0) {\n> 18 |     expect(1).toBe(2);\n     |               ^\n  19 |   }\n  20 | });\n  21 |\n    at /Users/yuri/Workdir/Yuri/e2ai/api/internal/suite/fixturegen/fixture.spec.ts:18:15"
+                    }
+                  ],
+                  "stdout": [],
+                  "stderr": [],
+                  "retry": 0,
+                  "startTime": "2026-09-20T03:58:00.984Z",
+                  "annotations": [],
+                  "attachments": [],
+                  "errorLocation": {
+                    "file": "/Users/yuri/Workdir/Yuri/e2ai/api/internal/suite/fixturegen/fixture.spec.ts",
+                    "column": 15,
+                    "line": 18
+                  }
+                },
+                {
+                  "workerIndex": 3,
+                  "parallelIndex": 0,
+                  "status": "passed",
+                  "duration": 0,
+                  "errors": [],
+                  "stdout": [],
+                  "stderr": [],
+                  "retry": 1,
+                  "startTime": "2026-09-20T03:58:01.541Z",
+                  "annotations": [],
+                  "attachments": []
+                }
+              ],
+              "status": "flaky"
+            }
+          ],
+          "id": "f50ffb23eefd99667046-af05497c2c690d96c44c",
+          "file": "fixture.spec.ts",
+          "line": 16,
+          "column": 5
+        },
+        {
+          "title": "skipped",
+          "ok": true,
+          "tags": [],
+          "tests": [
+            {
+              "timeout": 30000,
+              "annotations": [
+                {
+                  "type": "fixme",
+                  "location": {
+                    "file": "/Users/yuri/Workdir/Yuri/e2ai/api/internal/suite/fixturegen/fixture.spec.ts",
+                    "line": 22,
+                    "column": 6
+                  }
+                }
+              ],
+              "expectedStatus": "skipped",
+              "projectId": "",
+              "projectName": "",
+              "results": [
+                {
+                  "workerIndex": 3,
+                  "parallelIndex": 0,
+                  "status": "skipped",
+                  "duration": 0,
+                  "errors": [],
+                  "stdout": [],
+                  "stderr": [],
+                  "retry": 0,
+                  "startTime": "2026-09-20T03:58:01.549Z",
+                  "annotations": [
+                    {
+                      "type": "fixme",
+                      "location": {
+                        "file": "/Users/yuri/Workdir/Yuri/e2ai/api/internal/suite/fixturegen/fixture.spec.ts",
+                        "line": 22,
+                        "column": 6
+                      }
+                    }
+                  ],
+                  "attachments": []
+                }
+              ],
+              "status": "skipped"
+            }
+          ],
+          "id": "f50ffb23eefd99667046-0cba56783d82909a19bf",
+          "file": "fixture.spec.ts",
+          "line": 22,
+          "column": 6
+        }
+      ]
+    }
+  ],
+  "errors": [],
+  "stats": {
+    "startTime": "2026-09-20T03:57:59.256Z",
+    "duration": 2306.293,
+    "expected": 1,
+    "skipped": 1,
+    "unexpected": 1,
+    "flaky": 1
+  }
+}
