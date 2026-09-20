@@ -7,6 +7,7 @@ package river
 
 import (
 	"fmt"
+	"time"
 
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
@@ -23,12 +24,42 @@ const (
 // Client is the concrete River client type every e2ai process holds.
 type Client = river.Client[pgx.Tx]
 
+// Workers bundles job workers registered on a client.
+type Workers = river.Workers
+
+// JobArgs aliases River's job-args interface for call sites.
+type JobArgs = river.JobArgs
+
+// PeriodicJob aliases River's periodic job for call sites.
+type PeriodicJob = river.PeriodicJob
+
+// NewWorkers returns an empty worker bundle for WithWorkers.
+func NewWorkers() *Workers { return river.NewWorkers() }
+
+// AddWorker registers a worker on a bundle, keyed by its job args type.
+func AddWorker[T JobArgs](workers *Workers, worker river.Worker[T]) {
+	river.AddWorker(workers, worker)
+}
+
+// NewPeriodicJob builds one periodic job: insert the constructor's args every
+// interval. runOnStart fires once immediately at client start.
+func NewPeriodicJob(interval time.Duration, constructor func() JobArgs, runOnStart bool) *PeriodicJob {
+	return river.NewPeriodicJob(
+		river.PeriodicInterval(interval),
+		func() (river.JobArgs, *river.InsertOpts) { return constructor(), nil },
+		&river.PeriodicJobOpts{RunOnStart: runOnStart},
+	)
+}
+
 // DefaultClient builds the api-process River client: the "default" queue only.
-// Workers are empty at scaffold time (Wave 1 registers job args).
-func DefaultClient(pool *pgxpool.Pool, maxWorkers int) (*Client, error) {
+// Unknown-kind insert validation stays off: the api client enqueues the whole
+// job chain (and runner-queue jobs worked by a different process), so kinds
+// whose workers aren't registered yet (or register elsewhere) must insert.
+// Worker/periodic wiring is supplied by main.go through the options below.
+func DefaultClient(pool *pgxpool.Pool, maxWorkers int, opts ...Option) (*Client, error) {
 	return newClient(pool, map[string]river.QueueConfig{
 		QueueDefault: {MaxWorkers: maxWorkers},
-	})
+	}, opts...)
 }
 
 // RunnerClient builds the runner-process River client: the "runner" queue only.
@@ -38,11 +69,30 @@ func RunnerClient(pool *pgxpool.Pool, maxWorkers int) (*Client, error) {
 	})
 }
 
-func newClient(pool *pgxpool.Pool, queues map[string]river.QueueConfig) (*Client, error) {
-	client, err := river.NewClient(riverpgxv5.New(pool), &river.Config{
-		Queues:  queues,
-		Workers: river.NewWorkers(),
-	})
+// Option customizes the River client config without exposing raw river types
+// at call sites.
+type Option func(*river.Config)
+
+// WithWorkers registers job workers on the client.
+func WithWorkers(workers *river.Workers) Option {
+	return func(cfg *river.Config) { cfg.Workers = workers }
+}
+
+// WithPeriodicJobs schedules River periodic jobs (e.g. the reconcile sweep).
+func WithPeriodicJobs(jobs ...*river.PeriodicJob) Option {
+	return func(cfg *river.Config) { cfg.PeriodicJobs = append(cfg.PeriodicJobs, jobs...) }
+}
+
+func newClient(pool *pgxpool.Pool, queues map[string]river.QueueConfig, opts ...Option) (*Client, error) {
+	cfg := &river.Config{
+		Queues:              queues,
+		Workers:             river.NewWorkers(),
+		SkipUnknownJobCheck: true,
+	}
+	for _, opt := range opts {
+		opt(cfg)
+	}
+	client, err := river.NewClient(riverpgxv5.New(pool), cfg)
 	if err != nil {
 		return nil, fmt.Errorf("create river client: %w", err)
 	}

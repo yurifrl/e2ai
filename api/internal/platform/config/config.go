@@ -31,6 +31,13 @@ type Config struct {
 
 	// Runner queue sizing for the river "runner" queue (cmd/e2ai-runner).
 	RunnerMaxWorkers int
+
+	// Secrets (SECR-01): rendered from op:// refs into .env by `op inject`,
+	// never stored in the registry. WebhookSecret verifies X-Hub-Signature-256
+	// on GitHub deliveries; GitHubToken backs REST calls (reconcile sweep,
+	// PR comments).
+	WebhookSecret string
+	GitHubToken   string
 }
 
 // LoadDotEnv layers env files base -> $ENV -> per-user (later wins), the exact
@@ -78,6 +85,8 @@ func Load() (*Config, error) {
 		DevFallbackUser:  getEnv("DEV_FALLBACK_USER", ""),
 		RegistryDir:      getEnv("REGISTRY_DIR", filepath.Join(repoRoot(), "registry")),
 		RunnerMaxWorkers: runnerMaxWorkers,
+		WebhookSecret:    getEnv("WEBHOOK_SECRET", ""),
+		GitHubToken:      getEnv("GITHUB_TOKEN", ""),
 	}, nil
 }
 
