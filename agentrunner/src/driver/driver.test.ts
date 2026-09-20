@@ -254,7 +254,7 @@ test("IOSDriver.launch picks the first booted UDID and overrides the status bar"
   assert.equal(bar.tool, "xcrun");
   assert.deepEqual(
     bar.args.slice(1),
-    ["AAA-111-UDID", "status_bar", "override", "--time", "9:41", "--batteryState", "charged", "--batteryLevel", "100"],
+    ["status_bar", "AAA-111-UDID", "override", "--time", "9:41", "--batteryState", "charged", "--batteryLevel", "100"],
   );
 });
 
@@ -293,7 +293,7 @@ test("IOSDriver.act runs the maestro flow; navigate uses `simctl openurl`", asyn
 
   const nav = await driver.act(decision({ kind: "navigate", url: "https://staging.e2ai/x" }));
   const open = exec.calls.at(-1)!;
-  assert.deepEqual(open.args.slice(1), ["AAA-111-UDID", "openurl", "https://staging.e2ai/x"]);
+  assert.deepEqual(open.args.slice(1), ["openurl", "AAA-111-UDID", "https://staging.e2ai/x"]);
   assert.deepEqual(nav, { action: { navigated: "https://staging.e2ai/x" }, evidence: [] });
 });
 
@@ -308,8 +308,8 @@ test("IOSDriver.capture screenshot invokes `simctl io <udid> screenshot <path>`"
     assert.equal(shot.tool, "xcrun");
     // real simctl syntax: `xcrun simctl io <udid> screenshot <output path>`
     assert.deepEqual(shot.args.slice(1), [
-      "AAA-111-UDID",
       "io",
+      "AAA-111-UDID",
       "screenshot",
       join(paths.screenshotsDir, "step-1.png"),
     ]);
