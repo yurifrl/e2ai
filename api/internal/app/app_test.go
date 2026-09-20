@@ -41,7 +41,7 @@ func TestLoadRegistry(t *testing.T) {
 		WorkflowName:        "Release - Web",
 		WorkflowPath:        ".github/workflows/remote_workflow_betweb.yaml",
 		Environment:         "staging",
-		DisplayTitlePattern: `[BetWeb] Deploy to staging`,
+		DisplayTitlePattern: `\[BetWeb\] Deploy to staging`,
 		HealthURL:           "https://stg-bet-app.nsx.dev/healthz",
 		Surfaces:            []string{"web"},
 		WebhookSecretRef:    "op://SRE Team/e2ai/github_webhook_secret",

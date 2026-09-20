@@ -8,7 +8,7 @@ repo: bet-app
 workflow_name: Release - Web
 workflow_path: .github/workflows/remote_workflow_betweb.yaml
 environment: staging
-display_title_pattern: '[BetWeb] Deploy to staging'
+display_title_pattern: '\[BetWeb\] Deploy to staging'
 # Staging health endpoint for the rollout gate (INGE-03): poll until 200,
 # 2s interval, 15m budget; unknown/unset falls back to the fixed 5m wait.
 health_url: https://stg-bet-app.nsx.dev/healthz
