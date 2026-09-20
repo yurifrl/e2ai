@@ -1,0 +1,53 @@
+# agent-runner container spec (Phase 3 T7 — SAFE-01 sandbox/budget enforcement
+# config). DOCUMENTED SPEC, not yet enforced locally: agentrunner currently
+# runs on the host under tilt. Enforcement lands via compose network policy /
+# tilt the same way the P1 deterministic runner container (runner/Dockerfile)
+# did — this file is the contract the container config must satisfy.
+#
+# Boot gates in-process (agentrunner/src/sandbox.ts), independent of network
+# enforcement:
+#   assertNoAppCredentials(env)  — refuse to boot with app-secret-shaped vars
+#   Sandbox.assertNavigationAllowed(url) — deny-by-default egress gate
+apiVersion: v1
+kind: Pod
+metadata:
+  name: agent-runner
+  namespace: e2ai
+  annotations:
+    e2ai.dev/safe-01: "egress allowlist + no app credentials; violations logged and terminal"
+spec:
+  containers:
+    - name: agentrunner
+      image: mcr.microsoft.com/playwright/node:latest   # pinned sha at enforcement time
+      # NO credential mounts: no ~/.kube, no docker.sock, no cloud provider
+      # creds, no .aws/.gcp. The ONLY credentials reach the process via env,
+      # and only the e2ai/AIHUB-scoped ones below (assertNoAppCredentials
+      # refuses to boot otherwise).
+      volumeMounts: []
+      env:
+        # Session identity + control surfaces (T2/T4 producer contract)
+        - { name: E2AI_SESSION_ID, value: "$(E2AI_SESSION_ID)" }
+        - { name: E2AI_RUN_ID, value: "$(E2AI_RUN_ID)" }
+        - { name: E2AI_API_BASE_URL, value: "http://e2ai-api:8082" }
+        - { name: E2AI_RUNNER_SERVICE_TOKEN, valueFrom: { secretKeyRef: { name: e2ai-runner, key: service_token } } }
+        - { name: E2AI_ARTIFACTS_DIR, value: /artifacts }
+        # Gateway (aihub) — scoped to the e2ai service user; per-user budget
+        # cap set in aihub admin (BUDG-01 gateway-side cap, ops config).
+        - { name: AIHUB_BASE_URL, valueFrom: { secretKeyRef: { name: e2ai-runner, key: aihub_base_url } } }
+        - { name: AIHUB_API_TOKEN, valueFrom: { secretKeyRef: { name: e2ai-runner, key: aihub_api_token } } }
+        # Egress allowlist consumed by sandbox.ts (deny-by-default)
+        - { name: E2AI_STAGING_BASE_URL, value: "https://staging.bet-app.example" }
+        - { name: E2AI_STEP_CEILING, value: "40" }
+        - { name: E2AI_COST_CEILING_MILLICENTS, value: "250000" }
+        # NOTE: E2AI_ENV must NOT be set in the container — http loopback
+        # navigation is a host/fixture-only affordance.
+      resources:
+        limits: { cpu: "2", memory: 2Gi }
+  # Network policy intent (enforced at compose/tilt time): deny-by-default
+  # egress; only the origins in E2AI_STAGING_BASE_URL + AIHUB_BASE_URL +
+  # E2AI_API_BASE_URL resolve. Implement as:
+  #   compose: internal network + per-service dns allowlist
+  #   tilt/k8s: NetworkPolicy with ipBlock allowlist for the aihub + api
+  #   clusters and the staging domains; DNS name-filter as belt-and-braces.
+  # Violations surfaced by the in-process gate as EgressViolation (logged,
+  # terminal for the step).
