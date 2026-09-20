@@ -11,6 +11,7 @@ import (
 	"os"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -49,22 +50,29 @@ func testPool(t *testing.T) *pgxpool.Pool {
 
 func seedRun(t *testing.T, pool *pgxpool.Pool) pgtype.UUID {
 	t.Helper()
+	// workflow_run_id is unique per (app_id, workflow_run_id) — the seed is
+	// only idempotent on the app upsert, so give every call its own id.
 	var id pgtype.UUID
 	err := pool.QueryRow(context.Background(), `
 		with app as (
 			insert into registered_apps (owner, repo, workflow_name, workflow_path, environment, display_title_pattern, webhook_secret_ref, comment_marker)
 			values ('yuri', 'betweb', 'Release - Web', '.github/workflows/remote_workflow_betweb.yaml', 'staging', '\[BetWeb\] Deploy to staging', 'op://vault/betweb-webhook', '<!-- e2ai:run:betweb -->')
+			on conflict (owner, repo, workflow_name, environment)
+			do update set workflow_path = excluded.workflow_path
 			returning id
 		)
 		insert into runs (app_id, workflow_run_id, run_number, head_sha, environment)
-		select id, 424242, 7, 'deadbeef', 'staging' from app
+		select id, 424242 + $1, 7, 'deadbeef', 'staging' from app
 		returning id
-	`).Scan(&id)
+	`, seedRunSeq.Add(1)).Scan(&id)
 	if err != nil {
 		t.Fatalf("seed run fixture: %v", err)
 	}
 	return id
 }
+
+// seedRunSeq hands each seedRun call a distinct workflow_run_id.
+var seedRunSeq atomic.Int64
 
 func seedSession(t *testing.T, pool *pgxpool.Pool, runID pgtype.UUID, role Role, stepCeiling int, costCeiling int64) pgtype.UUID {
 	t.Helper()
@@ -409,16 +417,15 @@ func TestBudgetCostCeiling(t *testing.T) {
 	runID := seedRun(t, pool)
 	id := seedSession(t, pool, runID, RoleVisionJudge, 0, 100)
 
-	// 60 millicents per step from tokens (see math in step-ceiling test).
+	// PROSPECTIVE semantics (BUDG-02): a step whose cost would cross the
+	// ceiling is rejected up front — the accumulator never overshoots.
 	stepCost := CostMillicents(1000, 500, 40, 40)
 	step := Step{Kind: "judge", Decision: json.RawMessage(`{"verdict":"pass"}`), TokensIn: 1000, TokensOut: 500, CostMillicents: stepCost}
 
-	for range 2 {
-		if err := AppendStep(ctx, pool, id, step); err != nil {
-			t.Fatalf("append step: %v", err)
-		}
+	if err := AppendStep(ctx, pool, id, step); err != nil {
+		t.Fatalf("append step: %v", err)
 	}
-	// 120 >= 100 accumulated -> next append must trip the cost ceiling.
+	// 60 + 60 = 120 > 100 -> this append must trip the cost ceiling.
 	err := AppendStep(ctx, pool, id, step)
 	if !errors.Is(err, ErrBudgetExhausted) {
 		t.Fatalf("cost breach: want ErrBudgetExhausted, got %v", err)
@@ -430,10 +437,10 @@ func TestBudgetCostCeiling(t *testing.T) {
 	if !strings.Contains(note, "cost ceiling 100") {
 		t.Fatalf("breach note missing: %q", note)
 	}
-	if cost != 2*stepCost {
-		t.Fatalf("accumulated cost = %d, want %d", cost, 2*stepCost)
+	if cost != stepCost {
+		t.Fatalf("accumulated cost = %d, want %d (no overshoot)", cost, stepCost)
 	}
-	if got := stepCount(t, pool, id); got != 2 {
+	if got := stepCount(t, pool, id); got != 1 {
 		t.Fatalf("breached step must not persist, got %d", got)
 	}
 }

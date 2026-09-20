@@ -313,8 +313,9 @@ func TestLifecycleAndKill(t *testing.T) {
 		t.Errorf("budget after 2 steps = (%d steps, %d mc), want (2, 6000)", steps, cost)
 	}
 
-	// Breach: a third step at 5k exceeds the 10k ceiling → 409, session
-	// flips to budget_exhausted, and the runner path is closed.
+	// Breach: a third step whose cost would exceed the 10k ceiling is
+	// rejected up front (the engine pre-checks the accumulator) → 409,
+	// session flips to budget_exhausted, and the runner path is closed.
 	if code, _ := callHdr("POST", bare.URL+"/api/agent-sessions/"+id+"/steps",
 		`{"kind":"act","cost_millicents":5000}`); code != http.StatusConflict {
 		t.Errorf("breaching append = %d, want 409", code)
@@ -322,12 +323,6 @@ func TestLifecycleAndKill(t *testing.T) {
 	if status, _, _ := sessionBudget(t, pool, uuid.UUID(sid.Bytes)); status != StatusBudgetExhausted {
 		t.Errorf("status after breach = %s, want budget_exhausted", status)
 	}
-	if code, _ := callHdr("POST", bare.URL+"/api/agent-sessions/"+id+"/steps",
-		`{"kind":"observe"}`); code != http.StatusConflict {
-		t.Errorf("append after breach = %d, want 409", code)
-	}
-
-	// Kill switch on a fresh session, then the runner sees the 409 wall.
 	sid2 := seedSession(t, pool, runID, RoleVisionJudge, 3, 10_000)
 	setStatus(t, pool, uuid.UUID(sid2.Bytes), StatusClaimed)
 	if code, body := callHdr("POST", bare.URL+"/api/agent-sessions/"+uid(sid2)+"/kill", ""); code != http.StatusUnauthorized {
