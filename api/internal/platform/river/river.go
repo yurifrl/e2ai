@@ -63,10 +63,11 @@ func DefaultClient(pool *pgxpool.Pool, maxWorkers int, opts ...Option) (*Client,
 }
 
 // RunnerClient builds the runner-process River client: the "runner" queue only.
-func RunnerClient(pool *pgxpool.Pool, maxWorkers int) (*Client, error) {
+// Worker wiring is supplied by main.go through the options (WithWorkers).
+func RunnerClient(pool *pgxpool.Pool, maxWorkers int, opts ...Option) (*Client, error) {
 	return newClient(pool, map[string]river.QueueConfig{
 		QueueRunner: {MaxWorkers: maxWorkers},
-	})
+	}, opts...)
 }
 
 // Option customizes the River client config without exposing raw river types
@@ -81,6 +82,12 @@ func WithWorkers(workers *river.Workers) Option {
 // WithPeriodicJobs schedules River periodic jobs (e.g. the reconcile sweep).
 func WithPeriodicJobs(jobs ...*river.PeriodicJob) Option {
 	return func(cfg *river.Config) { cfg.PeriodicJobs = append(cfg.PeriodicJobs, jobs...) }
+}
+
+// WithQueues overrides the process's queue map (tests use it to add the
+// "runner" queue so execute-handoff inserts validate end to end).
+func WithQueues(queues map[string]river.QueueConfig) Option {
+	return func(cfg *river.Config) { cfg.Queues = queues }
 }
 
 func newClient(pool *pgxpool.Pool, queues map[string]river.QueueConfig, opts ...Option) (*Client, error) {

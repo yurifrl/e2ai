@@ -84,6 +84,13 @@ func run() error {
 		store := ingest.NewStore(pool.Pool)
 		queueRef := &ingest.QueueRef{}
 		workers := river.NewWorkers()
+
+		// Rollout gate (INGE-03): the first pipeline job after ingest —
+		// polls the registered app's health_url until the deploy is live,
+		// then hands the run to the runner queue. Needs no GitHub client,
+		// so it is registered unconditionally.
+		river.AddWorker(workers, ingest.NewWaitRolloutWorker(pool.Pool, queueRef, logger))
+
 		var periodic []*river.PeriodicJob
 		if ghClient != nil {
 			river.AddWorker(workers, ingest.NewReconcileWorker(apps, ghClient, store, queueRef, logger))
