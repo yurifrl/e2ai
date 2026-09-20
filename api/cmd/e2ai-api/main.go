@@ -21,6 +21,7 @@ import (
 	"github.com/NSXBet/e2ai/api/internal/platform/httpx"
 	"github.com/NSXBet/e2ai/api/internal/platform/postgres"
 	"github.com/NSXBet/e2ai/api/internal/platform/river"
+	"github.com/NSXBet/e2ai/api/internal/report"
 )
 
 func main() {
@@ -90,6 +91,12 @@ func run() error {
 		// then hands the run to the runner queue. Needs no GitHub client,
 		// so it is registered unconditionally.
 		river.AddWorker(workers, ingest.NewWaitRolloutWorker(pool.Pool, queueRef, logger))
+
+		// Report tail (VERD-01/SUIT-02): derives the run verdict from the
+		// evidence the runner stored, persists it with the summary counts,
+		// and completes the run. Needs no GitHub client (T10 mounts the
+		// comment/check-run publisher here), so it registers unconditionally.
+		river.AddWorker(workers, &report.Worker{Pool: pool.Pool, Logger: logger})
 
 		var periodic []*river.PeriodicJob
 		if ghClient != nil {
