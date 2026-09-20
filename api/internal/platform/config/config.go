@@ -38,6 +38,14 @@ type Config struct {
 	// PR comments).
 	WebhookSecret string
 	GitHubToken   string
+
+	// Report surface (T10/T11): ReportBaseURL is the public admin origin the
+	// sticky comment links to; ReportLinkSecret signs report-page + artifact
+	// links (?e2ai= HMAC). ArtifactsRoot is the artifact volume the api
+	// serves under /artifacts/.
+	ReportBaseURL    string
+	ReportLinkSecret string
+	ArtifactsRoot    string
 }
 
 // LoadDotEnv layers env files base -> $ENV -> per-user (later wins), the exact
@@ -87,6 +95,9 @@ func Load() (*Config, error) {
 		RunnerMaxWorkers: runnerMaxWorkers,
 		WebhookSecret:    getEnv("WEBHOOK_SECRET", ""),
 		GitHubToken:      getEnv("GITHUB_TOKEN", ""),
+		ReportBaseURL:    getEnv("E2AI_REPORT_BASE_URL", ""),
+		ReportLinkSecret: getEnv("E2AI_REPORT_LINK_SECRET", ""),
+		ArtifactsRoot:    getEnv("E2AI_ARTIFACTS_DIR", "/var/lib/e2ai/artifacts"),
 	}, nil
 }
 

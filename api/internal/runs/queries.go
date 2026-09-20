@@ -89,12 +89,14 @@ func (p Page) bounds() (int, int) {
 
 // ListRuns returns runs newest first, paginated by offset. Pagination is
 // stable across pages because created_at desc is tie-broken by id desc.
+// A null appID lists across every app (the /api/runs page surface); a valid
+// one scopes the page to that app.
 func ListRuns(ctx context.Context, db DB, appID pgtype.UUID, page Page) ([]Run, error) {
 	limit, offset := page.bounds()
 	rows, err := db.Query(ctx, `
 		select `+runColumns+`
 		from runs
-		where app_id = $1
+		where ($1::uuid is null or app_id = $1)
 		order by created_at desc, id desc
 		limit $2 offset $3
 	`, appID, limit, offset)

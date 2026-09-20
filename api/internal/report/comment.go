@@ -76,6 +76,7 @@ type appRef struct {
 // the detail view (per-test attachments, duration) the comment renders.
 type runFacts struct {
 	App        appRef
+	RunID      uuid.UUID
 	HeadSHA    string
 	DurationMS int64
 	CheckRunID pgtype.Int8
@@ -162,7 +163,8 @@ func (p *Publisher) publishComment(ctx context.Context, facts *runFacts, link st
 		return nil, nil
 	}
 
-	body := renderComment(facts.App.CommentMarker, facts.Rep, topFailures(facts), link, p.reportBase, facts.DurationMS)
+	body := renderComment(facts.App.CommentMarker, facts.Rep, topFailures(facts), link, p.reportBase,
+		facts.DurationMS, facts.RunID, reportToken(facts.RunID, p.linkSecret))
 	comments, err := p.gh.ListIssueComments(ctx, facts.App.Owner, facts.App.Repo, pr)
 	if err != nil {
 		return nil, fmt.Errorf("list comments: %w", err)
@@ -208,6 +210,7 @@ func loadFacts(ctx context.Context, pool *pgxpool.Pool, runID uuid.UUID, rep ver
 	}
 	return &runFacts{
 		App:        app,
+		RunID:      runID,
 		HeadSHA:    detail.Run.HeadSHA,
 		DurationMS: int64(detail.Run.DurationMS.Int32),
 		CheckRunID: detail.Run.CheckRunID,
@@ -338,7 +341,8 @@ func sanitizeArtifactPath(p string) (string, bool) {
 // verdict header with counts + duration, the signed report link and the
 // top failures. All evidence-derived text is HTML-escaped — test titles,
 // error messages and note are attacker-controllable data (no injection).
-func renderComment(marker string, rep verdict.Report, failures []failureRow, link, artifactBase string, durationMS int64) string {
+func renderComment(marker string, rep verdict.Report, failures []failureRow, link, artifactBase string,
+	durationMS int64, runID uuid.UUID, token string) string {
 	var b bytes.Buffer
 	b.WriteString(marker + "\n\n")
 	fmt.Fprintf(&b, "## e2ai run — %s\n\n", rep.Verdict)
@@ -358,8 +362,12 @@ func renderComment(marker string, rep verdict.Report, failures []failureRow, lin
 				fmt.Fprintf(&b, "  %s\n", html.EscapeString(f.Reason))
 			}
 			for _, shot := range f.Shots {
-				fmt.Fprintf(&b, "  <img src=\"%s/e2ai/artifacts/%s\" width=\"480\" alt=\"failure screenshot\">\n",
-					strings.TrimRight(artifactBase, "/"), shot)
+				// Screenshots are token-gated: the URL carries the run id
+				// (volume layout is <root>/<run id>/…) and the same ?e2ai=
+				// HMAC token the report link uses, so images render outside
+				// shell auth.
+				fmt.Fprintf(&b, "  <img src=\"%s/e2ai/artifacts/%s/%s?e2ai=%s\" width=\"480\" alt=\"failure screenshot\">\n",
+					strings.TrimRight(artifactBase, "/"), runID, shot, token)
 			}
 		}
 		b.WriteString("\n")

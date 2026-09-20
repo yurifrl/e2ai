@@ -30,12 +30,12 @@ type fakeGH struct {
 	srv *httptest.Server
 
 	mu       sync.Mutex
-	pulls    map[string][]github.CommitPull  // sha -> open PRs
-	comments map[int][]github.IssueComment   // pr -> comments
-	patches  map[int64]checkRunPatch         // check-run id -> last patch
-	nextID   int64                           // next comment id
-	requests int                             // total HTTP requests served
-	rate     string                          // X-RateLimit-Remaining to emit ("" = none)
+	pulls    map[string][]github.CommitPull // sha -> open PRs
+	comments map[int][]github.IssueComment  // pr -> comments
+	patches  map[int64]checkRunPatch        // check-run id -> last patch
+	nextID   int64                          // next comment id
+	requests int                            // total HTTP requests served
+	rate     string                         // X-RateLimit-Remaining to emit ("" = none)
 }
 
 // checkRunPatch mirrors UpdateCheckRunInput for body assertions.
@@ -58,10 +58,10 @@ type commentBody struct {
 func newFakeGH(t *testing.T) *fakeGH {
 	t.Helper()
 	f := &fakeGH{
-		t:       t,
-		pulls:   map[string][]github.CommitPull{},
+		t:        t,
+		pulls:    map[string][]github.CommitPull{},
 		comments: map[int][]github.IssueComment{},
-		patches: map[int64]checkRunPatch{},
+		patches:  map[int64]checkRunPatch{},
 	}
 	mux := http.NewServeMux()
 	mux.HandleFunc("GET /repos/NSXBet/bet-app/commits/{sha}/pulls", func(w http.ResponseWriter, r *http.Request) {
@@ -199,6 +199,7 @@ var (
 func testFacts(rep verdict.Report) *runFacts {
 	return &runFacts{
 		App:        appRef{ID: uuid.Must(uuid.NewRandom()), Owner: "NSXBet", Repo: "bet-app", CommentMarker: testMarker},
+		RunID:      uuid.Must(uuid.NewRandom()),
 		HeadSHA:    "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
 		DurationMS: 42_000,
 		CheckRunID: pgtype.Int8{Int64: 9001, Valid: true},
@@ -361,11 +362,11 @@ func TestPublishEscapesInjectedTitleAndReason(t *testing.T) {
 		Verdict: verdict.VerdictFail,
 		Counts:  verdict.Counts{Fail: 1},
 		Tests: []verdict.TestVerdict{{
-			ID:     "evil",
-			Title:  `<script>alert("pwned")</script> login`,
-			File:   "tests/evil.spec.ts",
+			ID:      "evil",
+			Title:   `<script>alert("pwned")</script> login`,
+			File:    "tests/evil.spec.ts",
 			Verdict: verdict.VerdictFail,
-			Reason: `<img src=x onerror=alert(1)> boom`,
+			Reason:  `<img src=x onerror=alert(1)> boom`,
 		}},
 	}
 	p, _ := testPublisher(t, f, testFacts(rep))

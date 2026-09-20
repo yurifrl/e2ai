@@ -102,8 +102,8 @@ func run() error {
 		if ghClient != nil {
 			reportWorker.Publisher = report.NewPublisher(
 				ghClient,
-				os.Getenv("E2AI_REPORT_BASE_URL"),
-				os.Getenv("E2AI_REPORT_LINK_SECRET"),
+				cfg.ReportBaseURL,
+				cfg.ReportLinkSecret,
 				logger,
 			)
 		}
@@ -147,9 +147,22 @@ func run() error {
 	} else {
 		dbHealth = func() bool { return false }
 	}
+
+	// T11 runs HTTP surface: paginated run list, run detail, report-page
+	// data, and token/identity-gated artifact serving. Unmounted when
+	// postgres is down (no run data to serve).
+	var runsSurface *report.RunsHTTP
+	if pool != nil {
+		runsSurface = report.NewRunsHTTP(pool.Pool, cfg.ArtifactsRoot, cfg.ReportLinkSecret)
+	}
+
 	handler := httpx.IdentityWithConfig(
 		httpx.IdentityConfig{DevFallbackUser: cfg.DevFallbackUser},
-		newMux(dbHealth, webhook),
+		httpx.RequestLog(httpx.RedactSecrets(logger, map[string]string{
+			"WEBHOOK_SECRET":          cfg.WebhookSecret,
+			"GITHUB_TOKEN":            cfg.GitHubToken,
+			"E2AI_REPORT_LINK_SECRET": cfg.ReportLinkSecret,
+		}), newMux(dbHealth, webhook, runsSurface)),
 	)
 	server := &http.Server{
 		Addr:              ":" + strconv.Itoa(cfg.Port),
@@ -175,10 +188,9 @@ func run() error {
 	}
 }
 
-// newMux returns the api HTTP surface: liveness/health plus the GitHub
-// webhook. A nil webhook (postgres down) leaves the route unmounted rather
-// than accepting unverifiable deliveries.
-func newMux(dbHealth func() bool, webhook http.Handler) http.Handler {
+// newMux returns the api HTTP surface: liveness/health, the GitHub webhook,
+// and (when postgres is up) the T11 runs + artifacts surface.
+func newMux(dbHealth func() bool, webhook http.Handler, runs *report.RunsHTTP) http.Handler {
 	mux := http.NewServeMux()
 	mux.HandleFunc("/healthz", func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
@@ -193,6 +205,14 @@ func newMux(dbHealth func() bool, webhook http.Handler) http.Handler {
 	if webhook != nil {
 		mux.Handle("/github/webhook", webhook)
 		mux.Handle("/github/webhook/", webhook)
+	}
+	if runs != nil {
+		// Wildcard patterns make r.PathValue resolve inside the handlers;
+		// method prefixes keep the surface GET-only.
+		mux.HandleFunc("GET /api/runs", runs.ListRuns)
+		mux.HandleFunc("GET /api/runs/{id}", runs.GetRun)
+		mux.HandleFunc("GET /api/runs/{id}/report", runs.RunReport)
+		mux.HandleFunc("GET /artifacts/{runID}/{path...}", runs.ServeArtifact)
 	}
 	return mux
 }
