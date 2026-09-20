@@ -7,7 +7,7 @@
 
 ## Project Phases
 
-### Phase 1 — Web happy path: deterministic foundation
+### Phase 1: Web happy path: deterministic foundation
 **Goal:** The full report-only QA loop for bet-app web on every deploy: webhook → run → deterministic Playwright suite → verdicts → live HTML report + sticky PR comment.
 
 **Delivers:**
@@ -29,7 +29,7 @@
 **Depends on:** bet-client deploy workflow + staging environment (external, exists today)
 **Guardrails:** No agents yet — Phase 1 is 100% deterministic. No mobile. No plans/approvals yet.
 
-### Phase 2 — Plans, approvals, and test derivation
+### Phase 2: Plans, approvals, and test derivation
 **Goal:** Human-supervised autonomy begins: declarative test plans with an approval queue, PR-diff-driven test selection and plan drafting, and the behavior-corpus oracle seeded from existing specs.
 
 **Delivers:**
@@ -49,7 +49,7 @@
 **Depends on:** Phase 1 (registry, runs, verdicts exist)
 **Guardrails:** Still deterministic + plans only — no agentic execution yet. Derivation drafts, never auto-runs.
 
-### Phase 3 — Agent roster and the agentic loop
+### Phase 3: Agent roster and the agentic loop
 **Goal:** The product's core claim goes live: five governed agents drive the web loop — Navigator clicks, Vision Judge verifies — with independent context, hard budgets, and a zero-credential sandbox.
 
 **Delivers:**
@@ -72,7 +72,7 @@
 **Depends on:** Phase 1 (runs, verdicts, reports) + Phase 2 (corpus oracle, approved plans)
 **Guardrails:** Web only. Agents execute approved plans + bounded hunts; never merge-gate; never touch production.
 
-### Phase 4 — Mobile surfaces
+### Phase 4: Mobile surfaces
 **Goal:** The same loop reaches the Android emulator and iOS simulator: Maestro-first Android, simctl+idb-grounded iOS, WebView-aware capture, pinned runner images.
 
 **Delivers:**
@@ -92,7 +92,7 @@
 **Depends on:** Phase 3 (agentic loop + Navigator surface abstraction extends to mobile)
 **Guardrails:** Real devices (TestFlight/cloud device farms) out of scope for v1.
 
-### Phase 5 — Flake governance, trends, and multi-app scale
+### Phase 5: Flake governance, trends, and multi-app scale
 **Goal:** Make it trustworthy at scale: flake rates and evidence-gated retries, refuse-to-heal selector repair, trends + cost dashboards, MCP surface for coding agents, bounded edge sweeps, multi-app onboarding.
 
 **Delivers:**
