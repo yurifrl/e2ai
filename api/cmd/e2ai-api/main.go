@@ -16,6 +16,7 @@ import (
 
 	"github.com/NSXBet/e2ai/api/internal/app"
 	"github.com/NSXBet/e2ai/api/internal/approvals"
+	"github.com/NSXBet/e2ai/api/internal/agents"
 	"github.com/NSXBet/e2ai/api/internal/derive"
 	"github.com/NSXBet/e2ai/api/internal/ingest"
 	"github.com/NSXBet/e2ai/api/internal/platform/config"
@@ -128,7 +129,17 @@ func run() error {
 		}
 		river.AddWorker(workers, reportWorker)
 
+		// Agent-session orphan sweep (AGNT-02): the periodic half of T2's
+		// wiring — lapsed claimed/running sessions are marked failed and a
+		// fresh queued session is requeued atomically.
+		river.AddWorker(workers, &agents.SweepWorker{Pool: pool.Pool, Logger: logger})
+
 		var periodic []*river.PeriodicJob
+		periodic = append(periodic, river.NewPeriodicJob(
+			agents.SweepInterval(),
+			func() river.JobArgs { return agents.SweepArgs{} },
+			true,
+		))
 		if ghClient != nil {
 			river.AddWorker(workers, ingest.NewReconcileWorker(apps, ghClient, store, queueRef, logger))
 			periodic = append(periodic, river.NewPeriodicJob(
@@ -192,13 +203,27 @@ func run() error {
 		approvalsSurface = approvals.NewApprovalsHTTP(pool.Pool, cfg.DevFallbackUser)
 	}
 
+	// AGNT-03 agents HTTP surface: runner lifecycle endpoints (heartbeat,
+	// steps, complete, fail) gated by the runner service token in addition
+	// to BFF identity, plus the admin kill switch and session enqueue. The
+	// token is optional in dev (BFF-identity-only); in prod the env var
+	// must be set. Same degraded posture — unmounted when postgres is down.
+	var agentsSurface *agents.AgentsHTTP
+	if pool != nil {
+		runnerToken := os.Getenv("E2AI_RUNNER_SERVICE_TOKEN")
+		if runnerToken == "" {
+			logger.Warn("E2AI_RUNNER_SERVICE_TOKEN unset; runner endpoints accept BFF identity only")
+		}
+		agentsSurface = agents.NewAgentsHTTP(pool.Pool, runnerToken)
+	}
+
 	handler := httpx.IdentityWithConfig(
 		httpx.IdentityConfig{DevFallbackUser: cfg.DevFallbackUser},
 		httpx.RequestLog(httpx.RedactSecrets(logger, map[string]string{
 			"WEBHOOK_SECRET":          cfg.WebhookSecret,
 			"GITHUB_TOKEN":            cfg.GitHubToken,
 			"E2AI_REPORT_LINK_SECRET": cfg.ReportLinkSecret,
-		}), newMux(dbHealth, webhook, runsSurface, plansSurface, approvalsSurface, pool, riverClient)),
+		}), newMux(dbHealth, webhook, runsSurface, plansSurface, approvalsSurface, agentsSurface, pool, riverClient)),
 	)
 	server := &http.Server{
 		Addr:              ":" + strconv.Itoa(cfg.Port),
