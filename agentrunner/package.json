@@ -1,0 +1,22 @@
+{
+  "name": "agentrunner",
+  "private": true,
+  "type": "module",
+  "engines": {
+    "node": ">=24"
+  },
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "pretest": "tsc -p tsconfig.json",
+    "test": "node --test \"dist/**/*.test.js\"",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@browserbasehq/stagehand": "^4.0.0",
+    "playwright": "^1.49.0"
+  },
+  "devDependencies": {
+    "@types/node": "^24.0.0",
+    "typescript": "^5.6.0"
+  }
+}
