@@ -83,7 +83,7 @@ async function bootSim(udid: string): Promise<void> {
         : err instanceof Error
           ? err.message
           : String(err);
-    if (!/already booted/i.test(msg)) throw err;
+    if (!/(already booted|current state: booted)/i.test(msg)) throw err;
   }
   // -b: block until the OS is fully reachable (fast no-op when already up).
   await run("xcrun", ["simctl", "bootstatus", udid, "-b"], { timeout: 300_000 });

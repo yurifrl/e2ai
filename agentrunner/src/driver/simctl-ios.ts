@@ -191,7 +191,10 @@ export class IOSDriver implements SurfaceDriver {
     const flowPath = `/tmp/e2ai-flow-${process.pid}.yaml`;
     const flow = maestroFlowYaml(decision, { appId: this.env.E2AI_IOS_APP_ID });
     await writeFile(flowPath, flow, "utf8");
-    const run = await this.exec.run(this.maestro, ["test", flowPath], {
+    // Pin the device explicitly: with an Android emulator also running,
+    // maestro auto-selects `emulator-5554` and runs the iOS flow on the
+    // wrong platform (probed live on the iPhone 17 sim, plan 04-01 T6).
+    const run = await this.exec.run(this.maestro, ["test", "--udid", udid, flowPath], {
       timeoutMs: MAESTRO_TEST_TIMEOUT_MS,
     });
     if (run.spawnError) {
