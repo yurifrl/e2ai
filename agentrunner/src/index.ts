@@ -51,7 +51,6 @@ export {
   runLoop,
   capture,
   artifactPaths,
-  fenceBlock,
   parseDecision,
   LoopConfigError,
 } from "./loop.js";

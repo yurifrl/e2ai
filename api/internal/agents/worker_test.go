@@ -111,14 +111,14 @@ func TestSpawnEnvAndArgvWiring(t *testing.T) {
 	sessionID := seedSession(t, pool, runID, RoleNavigator, 42, 100_000)
 
 	out := filepath.Join(t.TempDir(), "spawn.txt")
-	script := `echo "$E2AI_SESSION_ID|$E2AI_ROLE|$E2AI_ROLE_MODEL|$2 $3|$E2AI_API_BASE|$E2AI_SERVICE_TOKEN|$AIHUB_BASE|$AIHUB_TOKEN_REF|$E2AI_ARTIFACTS_DIR|$E2AI_STEP_CEILING|$E2AI_COST_CEILING_MILLICENTS" > "$SPAWN_OUT"`
+	script := `echo "$E2AI_SESSION_ID|$E2AI_RUN_ID|$E2AI_ROLE|$E2AI_AGENT_MODEL_NAVIGATOR|$2 $3|$E2AI_API_BASE_URL|$E2AI_RUNNER_SERVICE_TOKEN|$AIHUB_BASE_URL|$AIHUB_API_TOKEN|$E2AI_ARTIFACTS_DIR|$E2AI_STEP_CEILING|$E2AI_COST_CEILING_MILLICENTS" > "$SPAWN_OUT"`
 	w := newTestWorker(pool)
 	w.Command = []string{"sh", "-c", script, "agentrunner"} // $0=agentrunner, $1=--session, $2=<id>, $3=--role
 	w.RoleModels = map[Role]string{RoleNavigator: "glm-5.3-flash"}
 	w.APIBase = "http://api:8080"
 	w.ServiceToken = "svc-token"
 	w.AIHUBBase = "https://aihub.example/v1"
-	w.AIHUBTokenRef = "op://vault/aihub-gateway"
+	w.AIHUBToken = "aihub-token"
 	w.ArtifactsDir = "/var/lib/e2ai/artifacts"
 	t.Setenv("SPAWN_OUT", out)
 	runWorker(t, w, sessionID)
@@ -127,7 +127,7 @@ func TestSpawnEnvAndArgvWiring(t *testing.T) {
 	if err != nil {
 		t.Fatalf("fake agentrunner never ran (no spawn dump): %v", err)
 	}
-	want := sessionID.String() + "|navigator|glm-5.3-flash|" + sessionID.String() + " --role|http://api:8080|svc-token|https://aihub.example/v1|op://vault/aihub-gateway|/var/lib/e2ai/artifacts|42|100000\n"
+	want := sessionID.String() + "|" + runID.String() + "|navigator|glm-5.3-flash|" + sessionID.String() + " --role|http://api:8080|svc-token|https://aihub.example/v1|aihub-token|/var/lib/e2ai/artifacts|42|100000\n"
 	if string(got) != want {
 		t.Fatalf("spawn wiring:\n got %q\nwant %q", string(got), want)
 	}

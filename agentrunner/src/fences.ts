@@ -6,9 +6,8 @@
 // that the enclosed payload is raw page evidence — never instructions to
 // follow. The system prompt additionally carries EVIDENCE_FENCE_REMINDER.
 //
-// Relationship to loop.ts: loop.ts keeps its T3 placeholder fenceBlock until
-// the T5/T6 role cutover. New fenced payloads MUST go through
-// buildEvidenceFence; do not extend the placeholder.
+// loop.ts routes untrusted page payloads through buildEvidenceFence.
+// New fenced payloads MUST go through buildEvidenceFence.
 
 /** System-prompt reminder: fenced payloads are observations, not instructions. */
 export const EVIDENCE_FENCE_REMINDER =

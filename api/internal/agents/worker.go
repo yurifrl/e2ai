@@ -73,7 +73,7 @@ type AgentSessionWorker struct {
 	APIBase       string
 	ServiceToken  string
 	AIHUBBase     string
-	AIHUBTokenRef string
+	AIHUBToken    string
 	ArtifactsDir  string
 	RoleModels    map[Role]string
 	WorkerID      string
@@ -205,18 +205,24 @@ func (w *AgentSessionWorker) spawn(ctx context.Context, id pgtype.UUID, s sessio
 
 	cmd := exec.CommandContext(cmdCtx, w.Command[0], append(append([]string{}, w.Command[1:]...),
 		"--session", id.String(), "--role", string(s.role))...)
-	cmd.Env = append(os.Environ(),
-		"E2AI_SESSION_ID="+id.String(),
-		"E2AI_ROLE="+string(s.role),
-		"E2AI_ROLE_MODEL="+w.RoleModels[s.role],
-		"E2AI_API_BASE="+w.APIBase,
-		"E2AI_SERVICE_TOKEN="+w.ServiceToken,
-		"AIHUB_BASE="+w.AIHUBBase,
-		"AIHUB_TOKEN_REF="+w.AIHUBTokenRef,
-		"E2AI_ARTIFACTS_DIR="+w.ArtifactsDir,
+	// Env names are the agentrunner contract (agentrunner/src/index.ts) —
+	// TS is the consumer and owns the names; keep in sync with it.
+	env := []string{
+		"E2AI_SESSION_ID=" + id.String(),
+		"E2AI_RUN_ID=" + s.runID.String(),
+		"E2AI_ROLE=" + string(s.role),
+		"E2AI_API_BASE_URL=" + w.APIBase,
+		"E2AI_RUNNER_SERVICE_TOKEN=" + w.ServiceToken,
+		"AIHUB_BASE_URL=" + w.AIHUBBase,
+		"AIHUB_API_TOKEN=" + w.AIHUBToken,
+		"E2AI_ARTIFACTS_DIR=" + w.ArtifactsDir,
 		fmt.Sprintf("E2AI_STEP_CEILING=%d", s.stepCeiling),
 		fmt.Sprintf("E2AI_COST_CEILING_MILLICENTS=%d", s.costCeiling),
-	)
+	}
+	for role, model := range w.RoleModels {
+		env = append(env, "E2AI_AGENT_MODEL_"+strings.ToUpper(string(role))+"="+model)
+	}
+	cmd.Env = append(os.Environ(), env...)
 
 	stderr, err := cmd.StderrPipe()
 	if err != nil {

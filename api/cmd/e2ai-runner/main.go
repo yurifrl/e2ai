@@ -93,11 +93,11 @@ func run() error {
 	if runnerToken == "" {
 		logger.Warn("E2AI_RUNNER_SERVICE_TOKEN unset; agentrunner children get an empty service token")
 	}
-	apiBase := getEnv("E2AI_API_BASE", "")
+	apiBase := getEnv("E2AI_API_BASE_URL", "")
 	aihubBase := getEnv("AIHUB_BASE_URL", "")
-	aihubTokenRef := getEnv("AIHUB_GATEWAY_TOKEN_REF", "")
-	if aihubBase == "" || aihubTokenRef == "" {
-		logger.Warn("AIHUB_BASE_URL / AIHUB_GATEWAY_TOKEN_REF unset; agentrunner children cannot reach the LLM gateway")
+	aihubToken := getEnv("AIHUB_API_TOKEN", "")
+	if aihubBase == "" || aihubToken == "" {
+		logger.Warn("AIHUB_BASE_URL / AIHUB_API_TOKEN unset; agentrunner children cannot reach the LLM gateway")
 	}
 	river.AddWorker[agents.AgentSessionArgs](workers, &agents.AgentSessionWorker{
 		Pool:   pool.Pool,
@@ -107,14 +107,14 @@ func run() error {
 		APIBase:       apiBase,
 		ServiceToken:  runnerToken,
 		AIHUBBase:     aihubBase,
-		AIHUBTokenRef: aihubTokenRef,
+		AIHUBToken:    aihubToken,
 		ArtifactsDir:  cfg.ArtifactsRoot,
 		RoleModels: map[agents.Role]string{
-			agents.RoleNavigator:    getEnv("E2AI_NAVIGATOR_MODEL", ""),
-			agents.RoleVisionJudge:  getEnv("E2AI_VISION_JUDGE_MODEL", ""),
-			agents.RolePlanAuthor:   getEnv("E2AI_PLAN_AUTHOR_MODEL", ""),
-			agents.RoleEdgeHunter:   getEnv("E2AI_EDGE_HUNTER_MODEL", ""),
-			agents.RoleFlakeAnalyst: getEnv("E2AI_FLAKE_ANALYST_MODEL", ""),
+			agents.RoleNavigator:    getEnv("E2AI_AGENT_MODEL_NAVIGATOR", ""),
+			agents.RoleVisionJudge:  getEnv("E2AI_AGENT_MODEL_VISION_JUDGE", ""),
+			agents.RolePlanAuthor:   getEnv("E2AI_AGENT_MODEL_PLAN_AUTHOR", ""),
+			agents.RoleEdgeHunter:   getEnv("E2AI_AGENT_MODEL_EDGE_HUNTER", ""),
+			agents.RoleFlakeAnalyst: getEnv("E2AI_AGENT_MODEL_FLAKE_ANALYST", ""),
 		},
 		WorkerID: fmt.Sprintf("e2ai-runner:%d", os.Getpid()),
 	})
