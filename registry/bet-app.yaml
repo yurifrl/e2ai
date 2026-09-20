@@ -13,8 +13,11 @@ display_title_pattern: '\[BetWeb\] Deploy to staging'
 # 2s interval, 15m budget; unknown/unset falls back to the fixed 5m wait.
 health_url: https://stg-bet-app.nsx.dev/healthz
 surfaces: ["web"]
+# Phase 2 (PLAN-02): plans live in the app's own repo under e2ai/plans.
+plans_source:
+  kind: repo_path
+  path: e2ai/plans
 # Future phases (columns reserved in registered_apps):
-# plans_source: null
 # corpus_root: null
 # 1Password ref — plaintext secrets never stored in the registry.
 webhook_secret_ref: op://SRE Team/e2ai/github_webhook_secret

@@ -12,6 +12,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/goccy/go-yaml"
 	"github.com/jackc/pgx/v5/pgxpool"
 )
 
@@ -57,8 +58,11 @@ func TestLoadRegistry(t *testing.T) {
 	if len(a.Surfaces) != 1 || a.Surfaces[0] != "web" {
 		t.Errorf("surfaces: got %v, want [web]", a.Surfaces)
 	}
-	if a.PlansSource != nil || a.CorpusRoot != nil {
-		t.Errorf("future-phase fields must be nil when absent, got %+v/%+v", a.PlansSource, a.CorpusRoot)
+	if a.PlansSource == nil || *a.PlansSource != (PlansSource{Kind: "repo_path", Path: "e2ai/plans"}) {
+		t.Errorf("plans_source round-trip: got %+v, want repo_path/e2ai/plans", a.PlansSource)
+	}
+	if a.CorpusRoot != nil {
+		t.Errorf("corpus_root must be nil when absent, got %q", *a.CorpusRoot)
 	}
 }
 
@@ -84,6 +88,30 @@ func TestLoadRegistryRejects(t *testing.T) {
 	_, err := LoadRegistry(dir)
 	if err == nil {
 		t.Fatal("plaintext webhook secret must be rejected")
+	}
+
+	// Unknown plans_source kind (PLAN-02).
+	write("badkind.yaml", "owner: o\nrepo: r\nworkflow_name: W\nworkflow_path: p\n"+
+		"environment: staging\ndisplay_title_pattern: x\nwebhook_secret_ref: op://x\n"+
+		"comment_marker: m\nplans_source:\n  kind: s3\n  path: p\n")
+	if _, err := LoadRegistry(dir); err == nil {
+		t.Fatal("unknown plans_source kind must be rejected")
+	}
+
+	// repo_path without a path.
+	write("nopath.yaml", "owner: o\nrepo: r\nworkflow_name: W\nworkflow_path: p\n"+
+		"environment: staging\ndisplay_title_pattern: x\nwebhook_secret_ref: op://x\n"+
+		"comment_marker: m\nplans_source:\n  kind: repo_path\n")
+	if _, err := LoadRegistry(dir); err == nil {
+		t.Fatal("repo_path without path must be rejected")
+	}
+
+	// central_repo without a repo.
+	write("norepo.yaml", "owner: o\nrepo: r\nworkflow_name: W\nworkflow_path: p\n"+
+		"environment: staging\ndisplay_title_pattern: x\nwebhook_secret_ref: op://x\n"+
+		"comment_marker: m\nplans_source:\n  kind: central_repo\n")
+	if _, err := LoadRegistry(dir); err == nil {
+		t.Fatal("central_repo without repo must be rejected")
 	}
 }
 
@@ -119,6 +147,19 @@ func TestMigrateSeedLifecycle(t *testing.T) {
 	}
 	if err := MigrateRiver(ctx, pool); err != nil {
 		t.Fatalf("river migrate: %v", err)
+	}
+
+	// Phase 2 tables (RESEARCH §Pattern 4) must all exist after migrate.
+	for _, table := range []string{"plans", "plan_versions", "plan_approvals", "corpus_behaviors", "corpus_learnings"} {
+		var exists bool
+		if err := pool.QueryRow(ctx,
+			`select exists (select 1 from information_schema.tables where table_name = $1)`, table).
+			Scan(&exists); err != nil {
+			t.Fatal(err)
+		}
+		if !exists {
+			t.Errorf("phase 2 table %s missing after migrate", table)
+		}
 	}
 
 	// Boot-twice idempotency: migrations re-run are a no-op.
@@ -181,6 +222,21 @@ func TestMigrateSeedLifecycle(t *testing.T) {
 	}
 	if healthURL != "https://stg-bet-app.nsx.dev/healthz2" {
 		t.Errorf("updated config field did not follow the file: %q", healthURL)
+	}
+
+	// plans_source round-trips through the registered_apps text column as
+	// YAML and parses back into the PlansSource contract T2/T4 consume.
+	var plansSourceRaw string
+	if err := pool.QueryRow(ctx,
+		`select plans_source from registered_apps`).Scan(&plansSourceRaw); err != nil {
+		t.Fatal(err)
+	}
+	var ps PlansSource
+	if err := yaml.Unmarshal([]byte(plansSourceRaw), &ps); err != nil {
+		t.Fatalf("parse stored plans_source: %v (raw %q)", err, plansSourceRaw)
+	}
+	if ps != (PlansSource{Kind: "repo_path", Path: "e2ai/plans"}) {
+		t.Errorf("plans_source DB round-trip: got %+v, want repo_path/e2ai/plans", ps)
 	}
 
 	// Down + Migrate again: fresh cycle must succeed (migration up/down on a

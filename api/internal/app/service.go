@@ -28,10 +28,20 @@ type App struct {
 	HealthURL           string   `yaml:"health_url"`
 	Surfaces            []string `yaml:"surfaces"`
 	// Future phases (reserved columns): nil when absent from the file.
-	PlansSource      *string `yaml:"plans_source"`
-	CorpusRoot       *string `yaml:"corpus_root"`
-	WebhookSecretRef string  `yaml:"webhook_secret_ref"`
-	CommentMarker    string  `yaml:"comment_marker"`
+	PlansSource      *PlansSource `yaml:"plans_source"`
+	CorpusRoot       *string      `yaml:"corpus_root"`
+	WebhookSecretRef string       `yaml:"webhook_secret_ref"`
+	CommentMarker    string       `yaml:"comment_marker"`
+}
+
+// PlansSource declares where an app's declarative plans live (PLAN-02):
+// either a path inside the app's own repo, or a dedicated central repo.
+// Parsed straight from the registry YAML; persisted to the text column
+// registered_apps.plans_source as a YAML document.
+type PlansSource struct {
+	Kind string `yaml:"kind"` // repo_path | central_repo
+	Path string `yaml:"path"` // repo_path: dir inside the app repo
+	Repo string `yaml:"repo"` // central_repo: other repo's slug
 }
 
 // LoadRegistry parses every *.yaml file in dir into validated App values.
@@ -78,6 +88,26 @@ func (a App) validate() error {
 	if !strings.HasPrefix(a.WebhookSecretRef, "op://") {
 		return fmt.Errorf("webhook_secret_ref must be an op:// ref (plaintext secrets are never stored in the registry)")
 	}
+	if ps := a.PlansSource; ps != nil {
+		switch ps.Kind {
+		case "repo_path":
+			if ps.Path == "" {
+				return fmt.Errorf("plans_source kind repo_path requires path")
+			}
+			if ps.Repo != "" {
+				return fmt.Errorf("plans_source kind repo_path must not set repo")
+			}
+		case "central_repo":
+			if ps.Repo == "" {
+				return fmt.Errorf("plans_source kind central_repo requires repo")
+			}
+			if ps.Path != "" {
+				return fmt.Errorf("plans_source kind central_repo must not set path")
+			}
+		default:
+			return fmt.Errorf("plans_source kind must be repo_path or central_repo, got %q", ps.Kind)
+		}
+	}
 	return nil
 }
 
@@ -86,6 +116,14 @@ func (a App) validate() error {
 // count now registered (after upsert), so boot-twice stays one row per app.
 func SeedApps(ctx context.Context, pool *pgxpool.Pool, apps []App) (int, error) {
 	for _, app := range apps {
+		var plansSource string
+		if app.PlansSource != nil {
+			b, err := yaml.Marshal(app.PlansSource)
+			if err != nil {
+				return 0, fmt.Errorf("marshal plans_source for %s/%s: %w", app.Owner, app.Repo, err)
+			}
+			plansSource = string(b)
+		}
 		if _, err := pool.Exec(ctx, `
 			insert into registered_apps
 				(owner, repo, workflow_name, workflow_path, environment,
@@ -103,7 +141,7 @@ func SeedApps(ctx context.Context, pool *pgxpool.Pool, apps []App) (int, error) 
 				comment_marker = excluded.comment_marker
 		`, app.Owner, app.Repo, app.WorkflowName, app.WorkflowPath, app.Environment,
 			app.DisplayTitlePattern, app.HealthURL, app.Surfaces,
-			app.PlansSource, app.CorpusRoot, app.WebhookSecretRef, app.CommentMarker); err != nil {
+			plansSource, app.CorpusRoot, app.WebhookSecretRef, app.CommentMarker); err != nil {
 			return 0, fmt.Errorf("upsert app %s/%s %q (%s): %w",
 				app.Owner, app.Repo, app.WorkflowName, app.Environment, err)
 		}

@@ -26,8 +26,9 @@ var migrationsFS embed.FS
 // migration tables owned by this package, in drop order for Down (children
 // before parents; app_migrations last).
 var appTables = []string{
-	"pr_comments", "artifacts", "test_results", "runs", "webhook_events",
-	"registered_apps", "app_migrations",
+	"pr_comments", "artifacts", "test_results", "corpus_learnings", "runs",
+	"plan_approvals", "plan_versions", "plans", "corpus_behaviors",
+	"webhook_events", "registered_apps", "app_migrations",
 }
 
 // Migrate applies all pending embedded migrations in filename order, each in
