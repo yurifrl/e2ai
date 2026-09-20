@@ -11,9 +11,11 @@ import (
 	"log/slog"
 	"os"
 	"os/signal"
+	"strings"
 	"syscall"
 	"time"
 
+	"github.com/NSXBet/e2ai/api/internal/agents"
 	"github.com/NSXBet/e2ai/api/internal/platform/config"
 	"github.com/NSXBet/e2ai/api/internal/platform/github"
 	"github.com/NSXBet/e2ai/api/internal/platform/postgres"
@@ -80,6 +82,42 @@ func run() error {
 
 	workers := river.NewWorkers()
 	river.AddWorker(workers, executor)
+
+	// e2ai:agent:session worker (Phase 3 T4): spawns one ephemeral
+	// agentrunner child per queued agent session. Service token arrives
+	// already resolved from its op:// ref via .env (SECR-01: `op inject`
+	// renders secrets, never Go). Optional in dev; missing gateway wiring
+	// logs a warning but leaves the worker mounted so sessions still drive
+	// (the child itself fails fast and the session records why).
+	runnerToken := os.Getenv("E2AI_RUNNER_SERVICE_TOKEN")
+	if runnerToken == "" {
+		logger.Warn("E2AI_RUNNER_SERVICE_TOKEN unset; agentrunner children get an empty service token")
+	}
+	apiBase := getEnv("E2AI_API_BASE", "")
+	aihubBase := getEnv("AIHUB_BASE_URL", "")
+	aihubTokenRef := getEnv("AIHUB_GATEWAY_TOKEN_REF", "")
+	if aihubBase == "" || aihubTokenRef == "" {
+		logger.Warn("AIHUB_BASE_URL / AIHUB_GATEWAY_TOKEN_REF unset; agentrunner children cannot reach the LLM gateway")
+	}
+	river.AddWorker[agents.AgentSessionArgs](workers, &agents.AgentSessionWorker{
+		Pool:   pool.Pool,
+		Logger: logger,
+		Command: strings.Fields(getEnv(
+			"E2AI_AGENTRUNNER_COMMAND", "node /e2ai/agentrunner/agentrunner.mjs")),
+		APIBase:       apiBase,
+		ServiceToken:  runnerToken,
+		AIHUBBase:     aihubBase,
+		AIHUBTokenRef: aihubTokenRef,
+		ArtifactsDir:  cfg.ArtifactsRoot,
+		RoleModels: map[agents.Role]string{
+			agents.RoleNavigator:    getEnv("E2AI_NAVIGATOR_MODEL", ""),
+			agents.RoleVisionJudge:  getEnv("E2AI_VISION_JUDGE_MODEL", ""),
+			agents.RolePlanAuthor:   getEnv("E2AI_PLAN_AUTHOR_MODEL", ""),
+			agents.RoleEdgeHunter:   getEnv("E2AI_EDGE_HUNTER_MODEL", ""),
+			agents.RoleFlakeAnalyst: getEnv("E2AI_FLAKE_ANALYST_MODEL", ""),
+		},
+		WorkerID: fmt.Sprintf("e2ai-runner:%d", os.Getpid()),
+	})
 
 	client, err := river.RunnerClient(pool.Pool, cfg.RunnerMaxWorkers, river.WithWorkers(workers))
 	if err != nil {
