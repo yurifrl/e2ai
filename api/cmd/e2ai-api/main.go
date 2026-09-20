@@ -26,6 +26,7 @@ import (
 	"github.com/NSXBet/e2ai/api/internal/platform/postgres"
 	"github.com/NSXBet/e2ai/api/internal/platform/river"
 	"github.com/NSXBet/e2ai/api/internal/report"
+	"github.com/NSXBet/e2ai/api/internal/suite"
 	"github.com/jackc/pgx/v5"
 )
 
@@ -134,10 +135,23 @@ func run() error {
 		// fresh queued session is requeued atomically.
 		river.AddWorker[agents.SweepArgs](workers, &agents.SweepWorker{Pool: pool.Pool, Logger: logger})
 
+		// Image canary (PLAT-05): slow-cadence periodic job that runs a
+		// candidate runner image through the real pinning path (creates a
+		// run, enqueues execute with the pinned image). Inert unless
+		// E2AI_CANARY_IMAGE is set — read at fire time, so this wiring is
+		// harmless in every environment that hasn't opted into a rollout.
+		canaryWorker := &suite.CanaryWorker{Pool: pool.Pool, Logger: logger}
+		river.AddWorker[suite.CanaryArgs](workers, canaryWorker)
+
 		var periodic []*river.PeriodicJob
 		periodic = append(periodic, river.NewPeriodicJob(
 			agents.SweepInterval(),
 			func() river.JobArgs { return agents.SweepArgs{} },
+			true,
+		))
+		periodic = append(periodic, river.NewPeriodicJob(
+			suite.CanaryInterval(),
+			func() river.JobArgs { return suite.CanaryArgs{} },
 			true,
 		))
 		if ghClient != nil {
@@ -157,6 +171,7 @@ func run() error {
 			return err
 		}
 		queueRef.Set(riverClient)
+		canaryWorker.Queue = riverClient // late-bound like QueueRef; set before Start
 		webhook = ingest.NewHandler(cfg.WebhookSecret, apps, store, riverClient, logger)
 
 		if err := riverClient.Start(ctx); err != nil {

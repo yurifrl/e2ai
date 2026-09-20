@@ -53,6 +53,11 @@ const (
 // ExecuteArgs is the execute job's payload: the run to execute.
 type ExecuteArgs struct {
 	RunID string `json:"run_id"` // uuid string
+	// Image pins the runner container image for this run only (PLAT-05
+	// per-run pinning / canary). Empty runs the executor's process default
+	// (RUNNER_IMAGE); the effective image is stamped on runs.runner_image
+	// before the container starts, so overrides stay auditable per run.
+	Image string `json:"image,omitempty"`
 }
 
 func (ExecuteArgs) Kind() string { return JobKindExecute }
@@ -136,7 +141,9 @@ type Executor struct {
 	Queue JobEnqueuer
 	// Runner executes the suite container.
 	Runner ContainerRunner
-	// Image is the runner image (default e2ai-runner:local).
+	// Image is the runner image (default e2ai-runner:local). Per-run
+	// overrides come from ExecuteArgs.Image (PLAT-05); this stays the
+	// process default pin.
 	Image string
 	// ArtifactsDir is the host directory bound into every suite container;
 	// per-run results land at ArtifactsDir/<run id>/.
@@ -185,6 +192,19 @@ func (e *Executor) Work(ctx context.Context, job *river.Job[ExecuteArgs]) error 
 		return err
 	}
 
+	// Per-run image pin (PLAT-05): the job's Image overrides the process
+	// default. Stamp the effective image on the run row BEFORE anything
+	// touches GitHub or the container — an override that lived only in job
+	// args would be unauditable (candidate-vs-default comparison reads the
+	// run row) once the container is gone.
+	image := e.Image
+	if job.Args.Image != "" {
+		image = job.Args.Image
+	}
+	if err := e.pinImage(ctx, runID, image); err != nil {
+		return e.fail(ctx, run, "image pin", err, logger)
+	}
+
 	if err := e.transition(ctx, run, "provisioning → executing"); err != nil {
 		return err
 	}
@@ -221,7 +241,7 @@ func (e *Executor) Work(ctx context.Context, job *river.Job[ExecuteArgs]) error 
 		return e.fail(ctx, run, "provisioning", err, logger)
 	}
 
-	logger.Info("running suite container", "image", e.Image, "sha", run.headSHA)
+	logger.Info("running suite container", "image", image, "sha", run.headSHA)
 	env := []string{
 		"E2AI_REPO=" + run.owner + "/" + run.repo,
 		"E2AI_SHA=" + run.headSHA,
@@ -232,7 +252,7 @@ func (e *Executor) Work(ctx context.Context, job *river.Job[ExecuteArgs]) error 
 		env = append(env, "E2AI_GITHUB_TOKEN="+e.GitHubToken)
 	}
 	err = e.Runner.Run(ctx, ContainerSpec{
-		Image:  e.Image,
+		Image:  image,
 		Env:    env,
 		Mounts: []Mount{{Host: artifactsDir, Container: "/artifacts"}},
 	})
@@ -246,6 +266,14 @@ func (e *Executor) Work(ctx context.Context, job *river.Job[ExecuteArgs]) error 
 	rep, err := Parse(data)
 	if err != nil {
 		return e.fail(ctx, run, "parse", err, logger)
+	}
+
+	// Runner-version drift canary (PLAT-05): the report's config block
+	// names the Playwright version that produced it — the runner-code
+	// identity inside the image pin. Persist next to runner_image so
+	// pin-vs-behavior comparisons stay in SQL.
+	if err := e.pinVersion(ctx, runID, rep.Version); err != nil {
+		return e.fail(ctx, run, "version persist", err, logger)
 	}
 
 	if err := e.store(ctx, runID, rep, artifactsDir); err != nil {
@@ -632,6 +660,28 @@ func attachmentJSON(atts []Attachment) ([]byte, error) {
 		return nil, nil
 	}
 	return json.Marshal(rows)
+}
+
+// pinImage stamps the run row with the image this run's suite executes in
+// (PLAT-05). Written before the container starts; updated for re-tries.
+// Empty image means the process default wasn't set — stored as SQL null via
+// the same nullIfEmpty convention the report stage uses.
+func (e *Executor) pinImage(ctx context.Context, runID uuid.UUID, image string) error {
+	if _, err := e.Pool.Exec(ctx, `update runs set runner_image = $1 where id = $2`,
+		nullIfEmpty(image), runID); err != nil {
+		return fmt.Errorf("stamp runner_image: %w", err)
+	}
+	return nil
+}
+
+// pinVersion persists the Playwright version the parsed report carries (the
+// runner-code identity inside the image pin) onto the run row.
+func (e *Executor) pinVersion(ctx context.Context, runID uuid.UUID, version string) error {
+	if _, err := e.Pool.Exec(ctx, `update runs set runner_version = $1 where id = $2`,
+		nullIfEmpty(version), runID); err != nil {
+		return fmt.Errorf("stamp runner_version: %w", err)
+	}
+	return nil
 }
 
 // noteFail stamps runs.status = failed and error_note in one guarded update

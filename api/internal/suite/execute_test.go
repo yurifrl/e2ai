@@ -199,3 +199,67 @@ func TestExecuteRunsInheritsPoolSchema(t *testing.T) {
 		t.Fatalf("transition against executor pool: %v", err)
 	}
 }
+
+// loadPins reads the pinned image + persisted runner version for one run.
+func loadPins(t *testing.T, pool *pgxpool.Pool, runID uuid.UUID) (image, version string) {
+	t.Helper()
+	if err := pool.QueryRow(context.Background(), `
+		select runner_image, runner_version from runs where id = $1
+	`, runID).Scan(&image, &version); err != nil {
+		t.Fatalf("load pins: %v", err)
+	}
+	return image, version
+}
+
+// TestExecutePinsPerRunImageOverride (PLAT-05): ExecuteArgs.Image pins the
+// container for this run only — the spec carries the override and the run row
+// is stamped with the effective image before the container starts. The
+// report's config version lands on runs.runner_version (drift canary).
+func TestExecutePinsPerRunImageOverride(t *testing.T) {
+	pool := testPool(t)
+	migrate(t, pool)
+	runID := seedAppRun(t, pool)
+
+	e, runner := gateExecutor(t, pool, runID)
+	e.Image = "e2ai-runner:default"
+	if err := e.Work(context.Background(), &river.Job[ExecuteArgs]{
+		Args: ExecuteArgs{RunID: runID.String(), Image: "e2ai-runner:candidate"},
+	}); err != nil {
+		t.Fatalf("Work returned error: %v", err)
+	}
+
+	if len(runner.Specs) != 1 || runner.Specs[0].Image != "e2ai-runner:candidate" {
+		t.Fatalf("container specs = %+v, want one run on the candidate image", runner.Specs)
+	}
+	image, version := loadPins(t, pool, runID)
+	if image != "e2ai-runner:candidate" {
+		t.Fatalf("runs.runner_image = %q, want the job override", image)
+	}
+	if version != "1.58.2" {
+		t.Fatalf("runs.runner_version = %q, want the fixture report's 1.58.2", version)
+	}
+}
+
+// TestExecuteDefaultImageStampsProcessDefault (PLAT-05): with no override the
+// executor's process default runs, and that default is what the run row
+// records — a pin, not an omission.
+func TestExecuteDefaultImageStampsProcessDefault(t *testing.T) {
+	pool := testPool(t)
+	migrate(t, pool)
+	runID := seedAppRun(t, pool)
+
+	e, runner := gateExecutor(t, pool, runID)
+	e.Image = "e2ai-runner:default"
+	if err := e.Work(context.Background(), &river.Job[ExecuteArgs]{
+		Args: ExecuteArgs{RunID: runID.String()},
+	}); err != nil {
+		t.Fatalf("Work returned error: %v", err)
+	}
+
+	if len(runner.Specs) != 1 || runner.Specs[0].Image != "e2ai-runner:default" {
+		t.Fatalf("container specs = %+v, want one run on the process default", runner.Specs)
+	}
+	if image, _ := loadPins(t, pool, runID); image != "e2ai-runner:default" {
+		t.Fatalf("runs.runner_image = %q, want the process default", image)
+	}
+}
