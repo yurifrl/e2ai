@@ -25,6 +25,7 @@ import type {
   PlanApproval,
   PlansSyncResult,
   CorpusData,
+  CorpusBehavior,
   CorpusLearning,
 } from './types'
 
