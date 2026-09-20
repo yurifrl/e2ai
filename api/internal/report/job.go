@@ -65,6 +65,17 @@ type Worker struct {
 
 	// Publisher is the T10 handoff; nil disables it (T9, tests).
 	Publisher ReportPublisher
+
+	// Sync is the plans seam (T4): a deploy's verdict triggers a plan
+	// catalog sync so new declarative plans land as drafts. Best-effort —
+	// nil disables it (tests), failure is logged, never re-fails the run.
+	Sync SyncEnqueuer
+}
+
+// SyncEnqueuer is the narrow seam the plans queue ref satisfies; defined
+// here so report never imports the plans package.
+type SyncEnqueuer interface {
+	EnqueueSync(ctx context.Context, appID uuid.UUID) error
 }
 
 func (w *Worker) logger() *slog.Logger {
@@ -117,6 +128,19 @@ func (w *Worker) Work(ctx context.Context, job *river.Job[ReportArgs]) error {
 		"verdict", rep.Verdict,
 		"counts", rep.Counts,
 		"duration_ms", totalDuration(rows))
+
+	// Plan catalog sync (T4): a completed run means the deploy the run
+	// exercised is observable, so fire the per-app sync so new/changed
+	// declarative plans land in the catalog (drafts never execute). The
+	// sync is content-hash idempotent, so firing on every report is cheap;
+	// failure is logged, never re-fails the completed run.
+	if w.Sync != nil {
+		if appID, err := w.runApp(ctx, runID); err != nil {
+			logger.Warn("plans sync enqueue skipped", "reason", err)
+		} else if err := w.Sync.EnqueueSync(ctx, appID); err != nil {
+			logger.Warn("plans sync enqueue failed", "app_id", appID, "reason", err)
+		}
+	}
 
 	if w.Publisher != nil {
 		if err := w.Publisher.Publish(ctx, w.Pool, runID, rep); err != nil {
@@ -302,4 +326,17 @@ func toPgUUID(id uuid.UUID) pgtype.UUID {
 	var u pgtype.UUID
 	_ = u.Scan(id.String())
 	return u
+}
+
+// runApp resolves the owning app of a run (the plans sync target).
+func (w *Worker) runApp(ctx context.Context, runID uuid.UUID) (uuid.UUID, error) {
+	var appID pgtype.UUID
+	if err := w.Pool.QueryRow(ctx,
+		`select app_id from runs where id = $1`, toPgUUID(runID)).Scan(&appID); err != nil {
+		return uuid.Nil, fmt.Errorf("report: load run app: %w", err)
+	}
+	if !appID.Valid {
+		return uuid.Nil, fmt.Errorf("report: run %s has no app_id", runID)
+	}
+	return uuid.UUID(appID.Bytes), nil
 }

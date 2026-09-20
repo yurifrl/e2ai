@@ -233,6 +233,23 @@ func ListLearnings(ctx context.Context, pool *pgxpool.Pool, appID pgtype.UUID) (
 	return out, nil
 }
 
+// GetLearning loads one learning by id, or ErrNotFound. The REST layer
+// re-reads a learning after a decision so the client sees the new status.
+func GetLearning(ctx context.Context, pool *pgxpool.Pool, id pgtype.UUID) (*Learning, error) {
+	var l Learning
+	err := pool.QueryRow(ctx, `
+		select id, app_id, run_id, observation, status, created_at
+		from corpus_learnings where id = $1`, id).
+		Scan(&l.ID, &l.AppID, &l.RunID, &l.Observation, &l.Status, &l.CreatedAt)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return nil, ErrNotFound
+	}
+	if err != nil {
+		return nil, fmt.Errorf("corpus: get learning: %w", err)
+	}
+	return &l, nil
+}
+
 // PromoteLearning copies a learning into the behaviors oracle as
 // human-verified: the new behavior carries provenance.kind=learning (pinning
 // the originating learning and its run), verified_by set to the promoting

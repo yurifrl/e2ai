@@ -21,6 +21,7 @@ import (
 	"github.com/NSXBet/e2ai/api/internal/platform/httpx"
 	"github.com/NSXBet/e2ai/api/internal/platform/postgres"
 	"github.com/NSXBet/e2ai/api/internal/platform/river"
+	"github.com/NSXBet/e2ai/api/internal/plans"
 	"github.com/NSXBet/e2ai/api/internal/report"
 )
 
@@ -62,6 +63,7 @@ func run() error {
 	// (T3): the client needs the river_* tables, workers need registered_apps.
 	var webhook http.Handler
 	var riverClient *river.Client
+	var ghClient *github.Client
 	if pool != nil {
 		if err := app.Bootstrap(ctx, pool.Pool, logger, cfg.RegistryDir); err != nil {
 			return err
@@ -74,10 +76,11 @@ func run() error {
 		// GitHub REST client drives the reconciliation sweep (webhook
 		// delivery is at-least-once, never guaranteed). A missing token is a
 		// degraded sweep, not a crash: webhooks alone keep ingesting.
-		ghClient, ghErr := github.New(cfg.GitHubToken)
+		gh, ghErr := github.New(cfg.GitHubToken)
 		if ghErr != nil {
 			logger.Warn("github client unavailable; reconciliation sweep disabled", "error", ghErr)
 		}
+		ghClient = gh
 
 		// The worker bundle is built before the client (the client config
 		// takes it), while workers enqueue transactionally through a QueueRef
@@ -85,6 +88,12 @@ func run() error {
 		store := ingest.NewStore(pool.Pool)
 		queueRef := &ingest.QueueRef{}
 		workers := river.NewWorkers()
+
+		// Plans/corpus (T4): the sync worker mirrors declarative plans into
+		// the catalog under content-hash identity; corpus seeding walks the
+		// spec oracle after each sync pass. A missing GitHub token leaves
+		// both mounted but inert — sync needs the contents API.
+		plans.AddWorkers(workers, pool.Pool, ghClient, logger)
 
 		// Rollout gate (INGE-03): the first pipeline job after ingest —
 		// polls the registered app's health_url until the deploy is live,
@@ -156,13 +165,22 @@ func run() error {
 		runsSurface = report.NewRunsHTTP(pool.Pool, cfg.ArtifactsRoot, cfg.ReportLinkSecret)
 	}
 
+	// T4 plans/corpus HTTP surface: plan catalog, version content/diff,
+	// manual sync trigger, and the corpus oracle. Same degraded posture:
+	// unmounted when postgres is down. The sync trigger needs the GitHub
+	// contents API; without a token the route answers 503 from the handler.
+	var plansSurface *plans.PlansHTTP
+	if pool != nil {
+		plansSurface = plans.NewPlansHTTP(pool.Pool, ghClient)
+	}
+
 	handler := httpx.IdentityWithConfig(
 		httpx.IdentityConfig{DevFallbackUser: cfg.DevFallbackUser},
 		httpx.RequestLog(httpx.RedactSecrets(logger, map[string]string{
 			"WEBHOOK_SECRET":          cfg.WebhookSecret,
 			"GITHUB_TOKEN":            cfg.GitHubToken,
 			"E2AI_REPORT_LINK_SECRET": cfg.ReportLinkSecret,
-		}), newMux(dbHealth, webhook, runsSurface)),
+		}), newMux(dbHealth, webhook, runsSurface, plansSurface)),
 	)
 	server := &http.Server{
 		Addr:              ":" + strconv.Itoa(cfg.Port),
@@ -190,7 +208,7 @@ func run() error {
 
 // newMux returns the api HTTP surface: liveness/health, the GitHub webhook,
 // and (when postgres is up) the T11 runs + artifacts surface.
-func newMux(dbHealth func() bool, webhook http.Handler, runs *report.RunsHTTP) http.Handler {
+func newMux(dbHealth func() bool, webhook http.Handler, runs *report.RunsHTTP, plans *plans.PlansHTTP) http.Handler {
 	mux := http.NewServeMux()
 	mux.HandleFunc("/healthz", func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
@@ -213,6 +231,12 @@ func newMux(dbHealth func() bool, webhook http.Handler, runs *report.RunsHTTP) h
 		mux.HandleFunc("GET /api/runs/{id}", runs.GetRun)
 		mux.HandleFunc("GET /api/runs/{id}/report", runs.RunReport)
 		mux.HandleFunc("GET /artifacts/{runID}/{path...}", runs.ServeArtifact)
+	}
+	if plans != nil {
+		// Plans/corpus surface (T4): catalog + versions + diff (GET, view
+		// permission), sync trigger + corpus decisions (POST, edit
+		// permission).
+		plans.Mount(mux)
 	}
 	return mux
 }

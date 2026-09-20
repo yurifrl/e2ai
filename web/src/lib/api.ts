@@ -149,7 +149,7 @@ export function getCorpus(app: string): Promise<CorpusData> {
   return getJson(`/api/corpus?app=${encodeURIComponent(app)}`)
 }
 
-export function promoteLearning(learningId: string): Promise<CorpusLearning> {
+export function promoteLearning(learningId: string): Promise<CorpusBehavior> {
   return postJson(`/api/corpus/learnings/${encodeURIComponent(learningId)}/promote`, {})
 }
 
