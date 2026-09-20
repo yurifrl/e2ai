@@ -9,35 +9,35 @@ Requirements for initial release. Each maps to a roadmap phase (P1–P5 per rese
 
 ### Module & Integration
 
-- [ ] **INTG-01** *(P1)*: Module skeleton registers into the shared admin shell via `admin.module.json` (id `@admin/e2ai`, routeBase `/e2ai`, nav sections, commands, permissions) following the incidents-admin family pattern
-- [ ] **INTG-02** *(P1)*: Go hexagonal API + Postgres + River queue (Connect-RPC via BFF), local dev stack via Tilt with mock auth — matches shared-admin conventions
-- [ ] **INTG-03** *(P1)*: Report page renders inside the admin shell with live run state (start from a run, watch it progress, land on the full report)
+(- [x] **INTG-01**) *(P1)*: Module skeleton registers into the shared admin shell via `admin.module.json` (id `@admin/e2ai`, routeBase `/e2ai`, nav sections, commands, permissions) following the incidents-admin family pattern
+(- [x] **INTG-02**) *(P1)*: Go hexagonal API + Postgres + River queue (Connect-RPC via BFF), local dev stack via Tilt with mock auth — matches shared-admin conventions
+(- [x] **INTG-03**) *(P1)*: Report page renders inside the admin shell with live run state (start from a run, watch it progress, land on the full report)
 
 ### App Registry
 
-- [ ] **APPS-01** *(P1)*: Per-app config-as-code registration: repo, deploy workflow name, surfaces, environments, plans source, corpus root
-- [ ] **APPS-02** *(P1)*: bet-app registered as the first app — web surface, staging environment
+(- [x] **APPS-01**) *(P1)*: Per-app config-as-code registration: repo, deploy workflow name, surfaces, environments, plans source, corpus root
+(- [x] **APPS-02**) *(P1)*: bet-app registered as the first app — web surface, staging environment
 - [ ] **APPS-03** *(P5)*: Multi-app onboarding scaffold: adding a new app is a registry row + config, no code changes (`adminx`-style)
 
 ### Deploy Ingest
 
-- [ ] **INGE-01** *(P1)*: `workflow_run` deploy webhook ingest: HMAC validation, idempotent by delivery GUID + `repo/workflow/run_id`, 202-then-enqueue (no inline processing)
-- [ ] **INGE-02** *(P1)*: Poll-based reconciliation sweep for missed/duplicate webhook deliveries (webhooks are not auto-redelivered)
-- [ ] **INGE-03** *(P1)*: Deploy-completion ≠ live: rollout-health polling determines when QA actually starts against the deployed build
+(- [x] **INGE-01**) *(P1)*: `workflow_run` deploy webhook ingest: HMAC validation, idempotent by delivery GUID + `repo/workflow/run_id`, 202-then-enqueue (no inline processing)
+(- [x] **INGE-02**) *(P1)*: Poll-based reconciliation sweep for missed/duplicate webhook deliveries (webhooks are not auto-redelivered)
+(- [x] **INGE-03**) *(P1)*: Deploy-completion ≠ live: rollout-health polling determines when QA actually starts against the deployed build
 
 ### Deterministic Suite (P1)
 
-- [ ] **SUIT-01** *(P1)*: Seeded suite runs the existing bet-client Playwright specs on staging per deploy; run records consume Playwright blob/json + traces as evidence
-- [ ] **SUIT-02** *(P1)*: Deterministic runs establish the baseline the agentic layer must later beat
+(- [x] **SUIT-01**) *(P1)*: Seeded suite runs the existing bet-client Playwright specs on staging per deploy; run records consume Playwright blob/json + traces as evidence
+(- [x] **SUIT-02**) *(P1)*: Deterministic runs establish the baseline the agentic layer must later beat
 
 ### Verdicts & Reports
 
-- [ ] **VERD-01** *(P1)*: Verdict engine with fixed taxonomy `PASS / FAIL / FLAKY / INFRA_ERROR / INCONCLUSIVE`; verdicts derive from evidence + run state, never exit codes alone
-- [ ] **REPT-01** *(P1)*: Live HTML reports with screenshots and plain-language explanations (annotated screenshot canvas as chosen design; filmstrip = step timeline)
+(- [x] **VERD-01**) *(P1)*: Verdict engine with fixed taxonomy `PASS / FAIL / FLAKY / INFRA_ERROR / INCONCLUSIVE`; verdicts derive from evidence + run state, never exit codes alone
+(- [x] **REPT-01**) *(P1)*: Live HTML reports with screenshots and plain-language explanations (annotated screenshot canvas as chosen design; filmstrip = step timeline)
 - [ ] **REPT-02** *(P1)*: Failure classification answers one question per failure: app bug, test/expectation gap, agent flake, or infra
-- [ ] **REPT-03** *(P1)*: Sticky PR comment (one, updated per run) + neutral status check — the check is informational, never a failing gate
+(- [x] **REPT-03**) *(P1)*: Sticky PR comment (one, updated per run) + neutral status check — the check is informational, never a failing gate
 - [ ] **REPT-04** *(P3)*: Agentic run reports carry agent trajectory, per-step evidence citations, and verdicts that cite machine-checkable evidence or render `INCONCLUSIVE`
-- [ ] **SECR-01** *(P1)*: Secrets hygiene: credentials kept out of screenshots, logs, fixture metadata, and reports
+(- [x] **SECR-01**) *(P1)*: Secrets hygiene: credentials kept out of screenshots, logs, fixture metadata, and reports
 
 ### Test Plans & Approvals
 
