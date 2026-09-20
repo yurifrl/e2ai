@@ -73,9 +73,10 @@ func AppendStep(ctx context.Context, pool *pgxpool.Pool, sessionID pgtype.UUID, 
 		return fmt.Errorf("%w: %s", ErrTerminal, status)
 	}
 
-	// Hard stops: a ceiling > 0 that the accumulator already met rejects
-	// this step and terminates the session in the same tx.
-	if stepCeiling > 0 && stepsUsed >= stepCeiling {
+	// Hard stops are PROSPECTIVE (BUDG-02): a step that would cross a
+	// ceiling is rejected and terminates the session in the same tx —
+	// budgets never overshoot, and the runner path closes at the boundary.
+	if stepCeiling > 0 && stepsUsed+1 > stepCeiling {
 		note := fmt.Sprintf("step ceiling %d reached", stepCeiling)
 		if err := markBudgetExhausted(ctx, tx, sessionID, note); err != nil {
 			return err
@@ -85,7 +86,7 @@ func AppendStep(ctx context.Context, pool *pgxpool.Pool, sessionID pgtype.UUID, 
 		}
 		return fmt.Errorf("%w: %s", ErrBudgetExhausted, note)
 	}
-	if costCeiling > 0 && cost >= costCeiling {
+	if costCeiling > 0 && cost+step.CostMillicents > costCeiling {
 		note := fmt.Sprintf("cost ceiling %d millicents reached", costCeiling)
 		if err := markBudgetExhausted(ctx, tx, sessionID, note); err != nil {
 			return err

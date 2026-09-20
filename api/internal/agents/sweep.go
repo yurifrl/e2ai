@@ -35,6 +35,7 @@ func (SweepArgs) Kind() string { return "e2ai:agent:sweep" }
 
 // SweepWorker runs one orphan-recovery pass per tick.
 type SweepWorker struct {
+	river.WorkerDefaults[SweepArgs]
 	Pool   *pgxpool.Pool
 	Logger *slog.Logger
 }
