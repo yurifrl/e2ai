@@ -1,11 +1,13 @@
-// Command e2ai-runner is the runner-process entrypoint: config, postgres pool,
-// and a River client draining only the "runner" queue. Wave 1 registers the
-// e2ai:run:execute job arg (checkout SHA -> build -> serve :3000 -> playwright
-// run -> parse results.json -> store artifacts).
+// Command e2ai-runner is the runner-process entrypoint: config, postgres
+// pool, and a River client draining only the "runner" queue with the
+// e2ai:run:execute worker mounted (suite.Executor). The runner is
+// queue-disjoint from e2ai-api (which drains "default"), mirroring the
+// incidents-admin jobs factory split.
 package main
 
 import (
 	"context"
+	"fmt"
 	"log/slog"
 	"os"
 	"os/signal"
@@ -13,8 +15,17 @@ import (
 	"time"
 
 	"github.com/NSXBet/e2ai/api/internal/platform/config"
+	"github.com/NSXBet/e2ai/api/internal/platform/github"
 	"github.com/NSXBet/e2ai/api/internal/platform/postgres"
 	"github.com/NSXBet/e2ai/api/internal/platform/river"
+	"github.com/NSXBet/e2ai/api/internal/suite"
+)
+
+const (
+	defaultRunnerImage = "e2ai-runner:local"
+	// defaultArtifactsDir matches the tilt/host volume the api serves
+	// artifacts from (/e2ai/artifacts/{path}, traversal-guarded, SECR-01).
+	defaultArtifactsDir = "/var/lib/e2ai/artifacts"
 )
 
 func main() {
@@ -33,23 +44,53 @@ func run() error {
 	if err != nil {
 		return err
 	}
-	logger := slog.New(slog.NewTextHandler(os.Stderr, nil))
+	logger := newLogger(cfg)
 	slog.SetDefault(logger)
 	logger.Info("e2ai-runner starting", "queue", river.QueueRunner, "max_workers", cfg.RunnerMaxWorkers)
 
+	// The runner has no degraded mode: without postgres it cannot work any
+	// job. Bounded retries keep tilt's racing container starts from
+	// crash-looping on a slow postgres.
 	pool, err := postgres.OpenWithRetry(ctx, logger, cfg.DatabaseURL, 5, 2*time.Second)
 	if err != nil {
-		logger.Error("postgres unavailable after retries; exiting", "error", err)
-		return err
+		return fmt.Errorf("postgres unavailable: %w", err)
 	}
 	defer pool.Close()
 
-	client, err := river.RunnerClient(pool.Pool, cfg.RunnerMaxWorkers)
-	if err != nil {
-		return err
+	executor := &suite.Executor{
+		Pool:         pool.Pool,
+		Image:        getEnv("RUNNER_IMAGE", defaultRunnerImage),
+		ArtifactsDir: getEnv("RUNNER_ARTIFACTS_DIR", defaultArtifactsDir),
+		Runner:       suite.DockerRunner{},
+		Logger:       logger,
 	}
+	// Check-run reporting is sugar, not evidence: a missing token disables
+	// it rather than failing every run (SECR-01 fail-closed for secrets does
+	// not extend to optional niceties).
+	if cfg.GitHubToken != "" {
+		executor.GitHubToken = cfg.GitHubToken
+		gh, err := github.New(cfg.GitHubToken)
+		if err != nil {
+			return fmt.Errorf("create github client: %w", err)
+		}
+		executor.CheckRuns = checkRunAdapter{gh: gh}
+	} else {
+		logger.Warn("GITHUB_TOKEN unset; neutral check-runs disabled")
+	}
+
+	workers := river.NewWorkers()
+	river.AddWorker(workers, executor)
+
+	client, err := river.RunnerClient(pool.Pool, cfg.RunnerMaxWorkers, river.WithWorkers(workers))
+	if err != nil {
+		return fmt.Errorf("create river runner client: %w", err)
+	}
+	// The queue reference points at the real client now; the worker only
+	// enqueues after Start, so the client is fully built by then.
+	executor.Queue = client
+
 	if err := client.Start(ctx); err != nil {
-		return err
+		return fmt.Errorf("start river runner client: %w", err)
 	}
 	defer func() {
 		stopCtx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
@@ -61,4 +102,44 @@ func run() error {
 	<-ctx.Done()
 	logger.Info("shutdown signal received")
 	return nil
+}
+
+func newLogger(cfg *config.Config) *slog.Logger {
+	level := slog.LevelInfo
+	switch cfg.LogLevel {
+	case "debug":
+		level = slog.LevelDebug
+	case "warn":
+		level = slog.LevelWarn
+	case "error":
+		level = slog.LevelError
+	}
+	return slog.New(slog.NewTextHandler(os.Stderr, &slog.HandlerOptions{Level: level}))
+}
+
+func getEnv(key, fallback string) string {
+	if v := os.Getenv(key); v != "" {
+		return v
+	}
+	return fallback
+}
+
+// checkRunAdapter bridges github.Client's typed check-run API onto
+// suite.CheckRunCreator. Only the check id travels back — the executor
+// records it on the run row; status/conclusion later come from the report
+// stage (T9), never the creation response.
+type checkRunAdapter struct {
+	gh *github.Client
+}
+
+func (a checkRunAdapter) CreateCheckRun(ctx context.Context, owner, repo string, in suite.CheckRunInput) (*suite.CheckRun, error) {
+	cr, err := a.gh.CreateCheckRun(ctx, owner, repo, github.CreateCheckRunInput{
+		Name:    in.Name,
+		HeadSHA: in.HeadSHA,
+		Status:  in.Status,
+	})
+	if err != nil {
+		return nil, err
+	}
+	return &suite.CheckRun{ID: cr.ID}, nil
 }
