@@ -409,8 +409,9 @@ func TestBudgetStepCeiling(t *testing.T) {
 	}
 }
 
-// Cost ceiling: the accumulator crosses the ceiling, the next append
-// terminates the session; cost math from token counts verified end to end.
+// Cost ceiling: a step that would cross the ceiling is rejected up front
+// (BUDG-02, same boundary semantics as the step ceiling); cost math from
+// token counts verified end to end.
 func TestBudgetCostCeiling(t *testing.T) {
 	pool := testPool(t)
 	ctx := context.Background()
