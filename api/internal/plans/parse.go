@@ -34,6 +34,10 @@ type Frontmatter struct {
 	App      string `yaml:"app"`
 	Title    string `yaml:"title"`
 	Surfaces []string `yaml:"surfaces"`
+	// Surface is the mobile surface a plan executes on (Phase 4): "web",
+	// "android", or "ios". Optional; absent parses to SurfaceWeb so every
+	// pre-phase-4 plan keeps its meaning.
+	Surface  string    `yaml:"surface,omitempty"`
 	Trigger  string   `yaml:"trigger"`
 	PRFilter *PRFilter `yaml:"pr-filter,omitempty"`
 	Timeout  Duration  `yaml:"timeout,omitempty"`
@@ -55,6 +59,22 @@ const (
 	TriggerOnDemand = "on-demand"
 	TriggerNightly  = "nightly"
 )
+
+// Surface enum: the mobile surface a plan targets (Phase 4). Web is the
+// zero-meaning default — a plan without `surface:` is a web plan. The
+// vocabulary is locked with the TS side (agentrunner E2AI_SURFACE).
+const (
+	SurfaceWeb     = "web"
+	SurfaceAndroid = "android"
+	SurfaceIOS     = "ios"
+)
+
+// planSurfaces is the closed set the parser validates `surface:` against.
+var planSurfaces = map[string]bool{
+	SurfaceWeb:     true,
+	SurfaceAndroid: true,
+	SurfaceIOS:     true,
+}
 
 // OnFailure enum: what a surface does after a step fails. Stop is the
 // zero value — the surface halts and reports; continue moves to the next
@@ -144,6 +164,9 @@ func Parse(content []byte) (*Plan, error) {
 	if err := dec.Decode(&fm); err != nil {
 		return nil, fmt.Errorf("frontmatter: %w", err)
 	}
+	if fm.Surface == "" {
+		fm.Surface = SurfaceWeb
+	}
 	if err := validateFrontmatter(&fm); err != nil {
 		return nil, err
 	}
@@ -180,6 +203,9 @@ func splitFrontmatter(content string) (string, string, error) {
 func validateFrontmatter(fm *Frontmatter) error {
 	if fm.ID == "" {
 		return fmt.Errorf("id: required")
+	}
+	if !planSurfaces[fm.Surface] {
+		return fmt.Errorf("surface %q: must be one of web, android, ios", fm.Surface)
 	}
 	if !idPattern.MatchString(fm.ID) {
 		return fmt.Errorf("id %q: must match %s (slug + semver suffix, e.g. checkout-flow-v1.0.0)", fm.ID, idPattern)

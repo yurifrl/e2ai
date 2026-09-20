@@ -45,6 +45,9 @@ type planDTO struct {
 	App             string    `json:"app"`
 	Title           string    `json:"title"`
 	Surfaces        []string  `json:"surfaces"`
+	// Surface is the plan's target surface (Phase 4). Locked vocabulary with
+	// the TS side: "web"|"android"|"ios"; pre-phase-4 rows surface as "web".
+	Surface         string    `json:"surface"`
 	Trigger         string    `json:"trigger"`
 	Status          string    `json:"status"`
 	SourcePath      string    `json:"source_path"`
@@ -187,6 +190,11 @@ func wirePlan(r planRow) planDTO {
 		SourcePath:      r.SrcPath,
 		LatestVersionID: r.LatestID,
 		UpdatedAt:       r.Updated,
+	}
+	if r.Surface != nil && *r.Surface != "" {
+		dto.Surface = *r.Surface
+	} else {
+		dto.Surface = SurfaceWeb // pre-phase-4 frontmatter rows have no surface key
 	}
 	if r.Title != nil {
 		dto.Title = *r.Title

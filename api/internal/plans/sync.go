@@ -412,6 +412,7 @@ func frontmatterJSON(fm Frontmatter) ([]byte, error) {
 		"app":      fm.App,
 		"title":    fm.Title,
 		"surfaces": fm.Surfaces,
+		"surface":  fm.Surface,
 		"trigger":  fm.Trigger,
 		"timeout":  fm.Timeout.D().String(),
 	}

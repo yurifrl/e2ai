@@ -140,15 +140,18 @@ type sessionRuntime struct {
 	stepCeiling int
 	costCeiling int64
 	runStatus   string
+	// surface is the run's target surface (Phase 4). runs.surface is not
+	// null (default 'web'), so this is always populated.
+	surface     string
 }
 
 func (w *AgentSessionWorker) loadSession(id pgtype.UUID) (sessionRuntime, error) {
 	var s sessionRuntime
 	err := w.Pool.QueryRow(context.Background(), `
-		select s.status, s.role, s.run_id, s.step_ceiling, s.cost_ceiling_millicents, r.status
+		select s.status, s.role, s.run_id, s.step_ceiling, s.cost_ceiling_millicents, r.status, r.surface
 		from agent_sessions s join runs r on r.id = s.run_id
 		where s.id = $1
-	`, id).Scan(&s.status, &s.role, &s.runID, &s.stepCeiling, &s.costCeiling, &s.runStatus)
+	`, id).Scan(&s.status, &s.role, &s.runID, &s.stepCeiling, &s.costCeiling, &s.runStatus, &s.surface)
 	if err != nil {
 		return s, fmt.Errorf("load agent session %s: %w", id, err)
 	}
@@ -210,6 +213,9 @@ func (w *AgentSessionWorker) spawn(ctx context.Context, id pgtype.UUID, s sessio
 	env := []string{
 		"E2AI_SESSION_ID=" + id.String(),
 		"E2AI_RUN_ID=" + s.runID.String(),
+		// E2AI_SURFACE tells agentrunner which surface to drive (Phase 4);
+		// plain value like E2AI_RUN_ID, vocabulary web|android|ios.
+		"E2AI_SURFACE=" + s.surface,
 		"E2AI_ROLE=" + string(s.role),
 		"E2AI_API_BASE_URL=" + w.APIBase,
 		"E2AI_RUNNER_SERVICE_TOKEN=" + w.ServiceToken,

@@ -93,7 +93,7 @@ func TestPlansHTTPList(t *testing.T) {
 		t.Fatalf("plans = %v, want exactly the seeded plan", body["plans"])
 	}
 	plan := plans[0].(map[string]any)
-	for _, key := range []string{"id", "app", "title", "surfaces", "trigger", "status", "source_path", "latest_version_id", "updated_at"} {
+	for _, key := range []string{"id", "app", "title", "surfaces", "surface", "trigger", "status", "source_path", "latest_version_id", "updated_at"} {
 		if _, has := plan[key]; !has {
 			t.Errorf("plan missing %q (web/src/lib/types.ts contract)", key)
 		}

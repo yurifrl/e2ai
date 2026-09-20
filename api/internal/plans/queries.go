@@ -32,6 +32,7 @@ type planRow struct {
 	App      string // owner/repo of the registered app
 	Title    *string
 	Surfaces []string
+	Surface  *string // nil on pre-phase-4 rows whose frontmatter lacks surface
 	Trigger  *string
 	Status   string
 	SrcPath  string
@@ -55,13 +56,13 @@ type versionRow struct {
 // filtered by plans.status) newest-updated first, paginated by offset.
 func ListPlans(ctx context.Context, pool *pgxpool.Pool, appID pgtype.UUID, status string, limit, offset int) ([]planRow, error) {
 	sql := `
-		select p.id, p.app_id, a.owner || '/' || a.repo, f.title, f.surfaces, false, f.trigger,
+		select p.id, p.app_id, a.owner || '/' || a.repo, f.title, f.surfaces, f.surface, f.trigger,
 		       p.status, p.source_path, p.latest_version_id, p.updated_at
 		from plans p
 		join registered_apps a on a.id = p.app_id
 		left join plan_versions v on v.id = p.latest_version_id
 		left join lateral (select * from jsonb_to_record(v.frontmatter)
-			as x(title text, surfaces text[], trigger text)) f on v is not null
+			as x(title text, surfaces text[], surface text, trigger text)) f on v is not null
 	`
 	args := []any{}
 	if appID.Valid {
@@ -93,12 +94,10 @@ func scanPlanRows(rows pgx.Rows) ([]planRow, error) {
 	for rows.Next() {
 		var r planRow
 		var surfaces []string
-		var surfacesNull bool
-		if err := rows.Scan(&r.ID, &r.AppID, &r.App, &r.Title, &surfaces, &surfacesNull, &r.Trigger,
+		if err := rows.Scan(&r.ID, &r.AppID, &r.App, &r.Title, &surfaces, &r.Surface, &r.Trigger,
 			&r.Status, &r.SrcPath, &r.LatestID, &r.Updated); err != nil {
 			return nil, err
 		}
-		_ = surfacesNull
 		if surfaces != nil {
 			r.Surfaces = surfaces
 		}
@@ -110,13 +109,13 @@ func scanPlanRows(rows pgx.Rows) ([]planRow, error) {
 // GetPlan loads one plan row by id, or ErrNotFound.
 func GetPlan(ctx context.Context, pool *pgxpool.Pool, planID string) (*planRow, error) {
 	rows, err := pool.Query(ctx, `
-		select p.id, p.app_id, a.owner || '/' || a.repo, f.title, f.surfaces, false, f.trigger,
+		select p.id, p.app_id, a.owner || '/' || a.repo, f.title, f.surfaces, f.surface, f.trigger,
 		       p.status, p.source_path, p.latest_version_id, p.updated_at
 		from plans p
 		join registered_apps a on a.id = p.app_id
 		left join plan_versions v on v.id = p.latest_version_id
 		left join lateral (select * from jsonb_to_record(v.frontmatter)
-			as x(title text, surfaces text[], trigger text)) f on v is not null
+			as x(title text, surfaces text[], surface text, trigger text)) f on v is not null
 		where p.id = $1`, planID)
 	if err != nil {
 		return nil, err

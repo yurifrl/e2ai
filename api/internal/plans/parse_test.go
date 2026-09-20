@@ -165,6 +165,41 @@ trigger: nightly
 	}
 }
 
+func TestParseSurface(t *testing.T) {
+	src := `---
+id: minimal-v1.0.0
+app: bet-app
+title: t
+surfaces: [web]
+trigger: nightly
+---
+1. Do the thing.
+   judge: it is visible
+`
+	if got := mustParse(t, src).Frontmatter.Surface; got != SurfaceWeb {
+		t.Errorf("absent surface = %q, want %q (pre-phase-4 compatibility)", got, SurfaceWeb)
+	}
+
+	srcAndroid := strings.Replace(src, "trigger: nightly", "surface: android\ntrigger: nightly", 1)
+	if got := mustParse(t, srcAndroid).Frontmatter.Surface; got != "android" {
+		t.Errorf("surface: android = %q, want android", got)
+	}
+	srcIOS := strings.Replace(src, "trigger: nightly", "surface: ios\ntrigger: nightly", 1)
+	if got := mustParse(t, srcIOS).Frontmatter.Surface; got != "ios" {
+		t.Errorf("surface: ios = %q, want ios", got)
+	}
+
+	// Closed set: any other value — wrong case, unknown word — fails ingest.
+	srcDesktop := strings.Replace(src, "trigger: nightly", "surface: Desktop\ntrigger: nightly", 1)
+	if _, err := Parse([]byte(srcDesktop)); err == nil || !strings.Contains(err.Error(), "surface") {
+		t.Errorf("surface Desktop: err = %v, want surface vocabulary rejection", err)
+	}
+	srcWebCamel := strings.Replace(src, "trigger: nightly", "surface: Web\ntrigger: nightly", 1)
+	if _, err := Parse([]byte(srcWebCamel)); err == nil || !strings.Contains(err.Error(), "surface") {
+		t.Errorf("surface Web: err = %v, want surface vocabulary rejection", err)
+	}
+}
+
 // TestParseRejects walks every closed-set rule the format fixes. Each case
 // must fail with a message naming the offending rule (ingest surfaces these).
 func TestParseRejects(t *testing.T) {
