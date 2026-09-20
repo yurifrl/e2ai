@@ -29,9 +29,14 @@ type BehaviorStatus interface {
 
 // diffSource identifies the PR-diff provenance in a derived plan's sources
 // list ("diff" bare, or namespaced like "diff:PR-123").
-const diffSource = "diff"
+const DiffSource = "diff"
 
-func isDiffSource(id string) bool { return id == diffSource || strings.HasPrefix(id, diffSource+":") }
+// IsDiffSource reports whether a provenance id is diff-derived ("diff" or
+// "diff:*"). Derivation callers use it to prove their drafts never carry a
+// diff-only sources list (the tautology guard, DERV-03).
+func IsDiffSource(id string) bool {
+	return id == DiffSource || strings.HasPrefix(id, DiffSource+":")
+}
 
 // Validate checks a parsed plan against the environment's lookups. It
 // accumulates nothing: the first failing rule returns, with a message that
@@ -88,10 +93,10 @@ func validateTautology(fm Frontmatter) error {
 		return nil
 	}
 	if len(fm.Sources) == 0 {
-		return fmt.Errorf("derived plan: sources required (provenance ids; %q alone is a tautology)", diffSource)
+		return fmt.Errorf("derived plan: sources required (provenance ids; %q alone is a tautology)", DiffSource)
 	}
 	for _, id := range fm.Sources {
-		if !isDiffSource(id) {
+		if !IsDiffSource(id) {
 			return nil
 		}
 	}

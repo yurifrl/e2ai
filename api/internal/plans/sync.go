@@ -264,6 +264,42 @@ func lookupPlanApp(ctx context.Context, pool *pgxpool.Pool, ref string) (pgtype.
 // "changed" (new hash over an approved ancestor, pending_approval), or
 // "unchanged" (hash already stored).
 func upsertPlanVersion(ctx context.Context, pool *pgxpool.Pool, appID pgtype.UUID, path string, plan *Plan, content string) (string, error) {
+	return upsertVersion(ctx, pool, appID, path, plan, content, "", "plans-sync")
+}
+
+// UpsertDraftVersion stores one derivation-produced plan version (the draft
+// seam the derive package uses, DERV-02). Content is parsed and validated
+// on the same code path as sync ingest — app registration, surface subset,
+// verified uses: references, the tautology guard — so a draft can never
+// bypass the ingest rules. The version always lands with status draft and
+// attribution 'derive-draft': pending_approval is reachable only through
+// the approval REST flow, never by a machine write (an approved ancestor
+// does not pre-approve a new draft). Content-hash identity applies
+// unchanged, so re-running a deterministic derivation is a no-op. Returns
+// the outcome: "added" | "changed" (new hash over a previously stored
+// version) | "unchanged".
+func UpsertDraftVersion(ctx context.Context, pool *pgxpool.Pool, appID pgtype.UUID, path, content string) (string, error) {
+	plan, err := Parse([]byte(content))
+	if err != nil {
+		return "", fmt.Errorf("parse draft: %w", err)
+	}
+	lookups := dbLookups{pool: pool, appID: appID}
+	if err := Validate(plan, lookups, lookups); err != nil {
+		return "", fmt.Errorf("validate draft: %w", err)
+	}
+	// The same app-ownership rule sync enforces: a draft must declare the
+	// app it stores under.
+	if refID, ok := lookupPlanApp(ctx, pool, plan.Frontmatter.App); !ok || refID != appID {
+		return "", fmt.Errorf("draft declares app %q but stores under a different registered app", plan.Frontmatter.App)
+	}
+	return upsertVersion(ctx, pool, appID, path, plan, content, "draft", "derive-draft")
+}
+
+// upsertVersion is the shared storage path. status "" infers the sync
+// lifecycle (draft, or pending_approval over an approved ancestor); a
+// non-empty status is forced through (the derivation draft seam). created_by
+// stamps the plan_versions audit column.
+func upsertVersion(ctx context.Context, pool *pgxpool.Pool, appID pgtype.UUID, path string, plan *Plan, content, forceStatus, createdBy string) (string, error) {
 	hash := ContentHash([]byte(content))
 	version := planVersion(plan.Frontmatter.ID)
 
@@ -302,20 +338,24 @@ func upsertPlanVersion(ctx context.Context, pool *pgxpool.Pool, appID pgtype.UUI
 	}
 
 	// Lifecycle: approved ancestor → the new content waits for approval;
-	// never-approved → draft.
-	status := "draft"
-	var approved bool
-	err = pool.QueryRow(ctx, `
-		select exists (
-			select 1 from plan_approvals pa
-			join plan_versions pv on pv.id = pa.plan_version_id
-			where pv.plan_id = $1 and pa.decision = 'approved')`,
-		plan.Frontmatter.ID).Scan(&approved)
-	if err != nil {
-		return "", fmt.Errorf("check approval ancestry: %w", err)
-	}
-	if approved {
-		status = "pending_approval"
+	// never-approved → draft. A forced status (derivation drafts) bypasses
+	// the inference entirely — pending_approval is human-only.
+	status := forceStatus
+	if status == "" {
+		status = "draft"
+		var approved bool
+		err = pool.QueryRow(ctx, `
+			select exists (
+				select 1 from plan_approvals pa
+				join plan_versions pv on pv.id = pa.plan_version_id
+				where pv.plan_id = $1 and pa.decision = 'approved')`,
+			plan.Frontmatter.ID).Scan(&approved)
+		if err != nil {
+			return "", fmt.Errorf("check approval ancestry: %w", err)
+		}
+		if approved {
+			status = "pending_approval"
+		}
 	}
 
 	fm, err := frontmatterJSON(plan.Frontmatter)
@@ -325,8 +365,8 @@ func upsertPlanVersion(ctx context.Context, pool *pgxpool.Pool, appID pgtype.UUI
 	if _, err := pool.Exec(ctx, `
 		insert into plan_versions
 			(plan_id, version, content_hash, content, frontmatter, status, sources, created_by)
-		values ($1, $2, $3, $4, $5, $6, $7, 'plans-sync')`,
-		plan.Frontmatter.ID, version, hash, content, fm, status, jsonStrings(plan.Frontmatter.Sources)); err != nil {
+		values ($1, $2, $3, $4, $5, $6, $7, $8)`,
+		plan.Frontmatter.ID, version, hash, content, fm, status, jsonStrings(plan.Frontmatter.Sources), createdBy); err != nil {
 		return "", fmt.Errorf("insert version: %w", err)
 	}
 	if _, err := pool.Exec(ctx, `

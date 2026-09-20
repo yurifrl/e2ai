@@ -442,3 +442,84 @@ func (c *Client) ListDir(ctx context.Context, owner, repo, ref, dir string) ([]C
 	}
 	return entries, nil
 }
+
+// --- compare + PR files (derivation diff context, DERV-01) ---
+
+// CompareFile is one file entry shared by the compare and PR-files payloads.
+// Patch is the unified-diff hunk GitHub includes for text files — omitted
+// for binary and oversized (over ~1 MiB) files, never an error.
+type CompareFile struct {
+	Filename  string `json:"filename"`
+	Status    string `json:"status"` // added|removed|modified|renamed|changed
+	Additions int    `json:"additions"`
+	Deletions int    `json:"deletions"`
+	Changes   int    `json:"changes"`
+	Patch     string `json:"patch,omitempty"`
+}
+
+// compareFiles is the wire shape of GET .../compare/{base}...{head}. GitHub
+// returns up to maxCompareFiles entries and maxCompareCommits commits; a
+// larger real diff is silently cut, so Compare derives the truncation flag
+// from the caps instead of trusting the absence of a flag field.
+type compareFiles struct {
+	TotalCommits int           `json:"total_commits"`
+	Files        []CompareFile `json:"files"`
+}
+
+// comparePayloadCaps are the documented response caps of the compare API.
+// Hitting either means the payload is a truncation, not the whole truth.
+const (
+	compareFileCap   = 300
+	compareCommitCap = 250
+	prFilesPageSize  = 100
+)
+
+// DiffResult is the unified diff context derivation consumes. Files is the
+// changed-path list (compare payload, or the PR-files payload when a PR is
+// known); DiffTruncated is true when the compare API hit its documented
+// file or commit cap — callers surface the degradation in derivation
+// output, never silently drop it.
+type DiffResult struct {
+	Files         []CompareFile
+	DiffTruncated bool
+}
+
+// Compare diffs base against head with the three-dot form (merge-base
+// compare), which matches GitHub PR semantics — PR commits are not in the
+// base, so a two-dot compare undercounts for PRs. The truncation flag is
+// set when the response hit the compare API's documented caps.
+// GET /repos/{owner}/{repo}/compare/{base}...{head}
+func (c *Client) Compare(ctx context.Context, owner, repo, base, head string) (DiffResult, error) {
+	basehead := url.PathEscape(base) + "..." + url.PathEscape(head)
+	var payload compareFiles
+	if err := c.do(ctx, http.MethodGet,
+		fmt.Sprintf("repos/%s/%s/compare/%s", owner, repo, basehead), nil, &payload); err != nil {
+		return DiffResult{}, err
+	}
+	return DiffResult{
+		Files: payload.Files,
+		DiffTruncated: len(payload.Files) >= compareFileCap ||
+			payload.TotalCommits >= compareCommitCap,
+	}, nil
+}
+
+// ListPRFiles lists a PR's changed files. When the webhook context names a
+// PR this is the preferred diff source: no 300-file/250-commit compare cap
+// and richer per-file data. Pages are followed until exhausted so the
+// "no truncation" property holds for large PRs.
+// GET /repos/{owner}/{repo}/pulls/{n}/files?per_page=100&page=N
+func (c *Client) ListPRFiles(ctx context.Context, owner, repo string, number int) ([]CompareFile, error) {
+	var files []CompareFile
+	for page := 1; ; page++ {
+		var batch []CompareFile
+		endpoint := fmt.Sprintf("repos/%s/%s/pulls/%d/files?per_page=%d&page=%d",
+			owner, repo, number, prFilesPageSize, page)
+		if err := c.do(ctx, http.MethodGet, endpoint, nil, &batch); err != nil {
+			return nil, err
+		}
+		files = append(files, batch...)
+		if len(batch) < prFilesPageSize {
+			return files, nil
+		}
+	}
+}
