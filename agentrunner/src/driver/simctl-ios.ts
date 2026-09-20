@@ -36,6 +36,19 @@ const PROBE_TIMEOUT_MS = 10_000;
 const MAESTRO_TEST_TIMEOUT_MS = 180_000;
 const RECORD_VIDEO_TIMEOUT_MS = 300_000;
 
+/** Extract a UDID from a `simctl list devices` line. Handles both output
+ * shapes: "iPhone 17 (UDID) (Booted)" (parenthesized UUID) and the older
+ * "UDID (iPhone 17) (Booted)" (leading token before " ("). */
+export function parseUdid(line: string): string | null {
+  const tokens = line.match(/\(([^)]+)\)/g) ?? [];
+  for (const tok of tokens) {
+    const inner = tok.slice(1, -1);
+    if (inner.length >= 25 && /^[0-9A-Fa-f-]+$/.test(inner)) return inner;
+  }
+  const lead = line.split(" (")[0]?.trim() ?? "";
+  return lead.length > 0 && !lead.includes("(") ? lead : null;
+}
+
 export interface IOSDriverDeps {
   env: NodeJS.ProcessEnv;
   /** Injection seam for tests; defaults to real child_process spawns. */
@@ -96,7 +109,9 @@ export class IOSDriver implements SurfaceDriver {
     }
     const pinned = this.pinnedUdid;
     if (pinned) {
-      const match = booted.find((l) => l.startsWith(pinned));
+      // The UDID string appears verbatim on its device line in every simctl
+      // output shape, so a substring match is format-agnostic.
+      const match = booted.find((l) => l.includes(pinned));
       if (!match) {
         throw new InfraFlakeError(
           "infra_flake:device_offline",
@@ -106,8 +121,18 @@ export class IOSDriver implements SurfaceDriver {
       }
       return this.pinnedUdid;
     }
-    // first booted UDID: line shape "UDID (name) (Booted)"
-    return booted[0]!.split(" ")[0]!;
+    // First booted UDID. Real simctl prints "iPhone 17 (UDID) (Booted)"; some
+    // Xcode versions print the inverted "UDID (iPhone 17) (Booted)" — accept
+    // both rather than pinning the parser to one era's formatting.
+    const udid = parseUdid(booted[0]!);
+    if (!udid) {
+      throw new InfraFlakeError(
+        "infra_flake:device_offline",
+        this.xcrun,
+        `could not parse a UDID from simctl output line: ${booted[0]}`,
+      );
+    }
+    return udid;
   }
 
   async launch(_ctx: LaunchContext): Promise<void> {
@@ -115,8 +140,8 @@ export class IOSDriver implements SurfaceDriver {
     // Deterministic status bar for evidence capture (battery full, fixed
     // clock). Best-effort — a failure here is not fatal to the run.
     const bar = this.simctl([
-      udid,
       "status_bar",
+      udid,
       "override",
       "--time",
       "9:41",
@@ -132,7 +157,7 @@ export class IOSDriver implements SurfaceDriver {
    * grounding placeholder until a UI dump path lands with T5/T6). */
   async observe(): Promise<DriverObservation> {
     const udid = await this.assertBooted();
-    const probe = this.simctl([udid, "listapps"]);
+    const probe = this.simctl(["listapps", udid]);
     const run = await this.exec.run(probe.tool, probe.args, { timeoutMs: PROBE_TIMEOUT_MS });
     if (run.code !== 0) {
       throw new InfraFlakeError(
@@ -148,7 +173,7 @@ export class IOSDriver implements SurfaceDriver {
     const udid = await this.assertBooted();
     if (decision.kind === "navigate") {
       const url = String(decision.url ?? "");
-      const open = this.simctl([udid, "openurl", url]);
+      const open = this.simctl(["openurl", udid, url]);
       const run = await this.exec.run(open.tool, open.args);
       if (run.code !== 0) {
         throw new InfraFlakeError(
@@ -198,7 +223,7 @@ export class IOSDriver implements SurfaceDriver {
   private async captureScreenshot(udid: string, ctx: CaptureContext): Promise<EvidenceRef[]> {
     await mkdir(ctx.paths.screenshotsDir, { recursive: true });
     const screenshotPath = join(ctx.paths.screenshotsDir, `step-${ctx.idx}.png`);
-    const io = this.simctl([udid, "io", "screenshot", screenshotPath]);
+    const io = this.simctl(["io", udid, "screenshot", screenshotPath]);
     const run = await this.exec.run(io.tool, io.args, { binary: true });
     if (run.spawnError) {
       throw new InfraFlakeError("infra_flake:tool_missing", this.xcrun, run.spawnError);
@@ -224,7 +249,7 @@ export class IOSDriver implements SurfaceDriver {
     }
     await mkdir(ctx.paths.videosDir, { recursive: true });
     const videoPath = join(ctx.paths.videosDir, `step-${ctx.idx}.mp4`);
-    const io = this.simctl([udid, "io", "recordVideo", "--force", videoPath]);
+    const io = this.simctl(["io", udid, "recordVideo", "--force", videoPath]);
     const proc = await this.exec.spawnLong(io.tool, io.args);
     this.recording = proc;
     // recordVideo runs until signalled; bound the window then stop.
