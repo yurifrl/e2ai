@@ -57,24 +57,24 @@ Requirements for initial release. Each maps to a roadmap phase (P1–P5 per rese
 ### Agent Roster & Run Loop
 
 - [ ] **AGNT-01** *(P3)*: Fixed roster with governed handoffs: Navigator (driver), Vision Judge (verifier), Plan Author (authoring), Edge-case Hunter (bounded exploration), Flakiness Analyst (stability)
-- [ ] **AGNT-02** *(P3)*: Session orchestrator: River queue, heartbeat/wake, append-only run log, atomic run claiming, orphan recovery
+- [x] **AGNT-02** *(P3)*: Session orchestrator: River queue, heartbeat/wake, append-only run log, atomic run claiming, orphan recovery
 - [ ] **AGNT-03** *(P3)*: Navigator: a11y-tree-grounded locator-first navigation on web (Playwright + Stagehand), vision used to verify — not to click blind
 - [ ] **AGNT-04** *(P3)*: Vision Judge: separate agent, independent context (different model family for high-stakes verdicts), oracle = expected-behavior store; deterministic side-effect assertions alongside VLM judgment
-- [ ] **AGNT-05** *(P3)*: All model traffic routes through the company aihub gateway; no provider keys in agents
+- [x] **AGNT-05** *(P3)*: All model traffic routes through the company aihub gateway; no provider keys in agents
 
 ### Budgets & Safety
 
-- [ ] **BUDG-01** *(P3)*: Layered budget caps: step ceiling, per-run cost accumulator with non-retryable `BudgetExhausted`, gateway-level per-run budget keys
-- [ ] **BUDG-02** *(P3)*: Operator kill switch stops runs without a deploy; stuck detection over action history
-- [ ] **SAFE-01** *(P3)*: Agent sandbox: zero credentials, egress allowlist, action allowlists, staging-only execution, full trajectory logging for forensics (page content is data, never instructions)
+- [x] **BUDG-01** *(P3)*: Layered budget caps: step ceiling, per-run cost accumulator with non-retryable `BudgetExhausted`, gateway-level per-run budget keys
+- [x] **BUDG-02** *(P3)*: Operator kill switch stops runs without a deploy; stuck detection over action history
+- [x] **SAFE-01** *(P3)*: Agent sandbox: zero credentials, egress allowlist, action allowlists, staging-only execution, full trajectory logging for forensics (page content is data, never instructions)
 
 ### Surfaces
 
-- [ ] **PLAT-01** *(P1)*: Web surface runs through Playwright with viewport projects matching bet-client's config (desktop + mobile viewports)
-- [ ] **PLAT-02** *(P4)*: Android emulator surface via Maestro (YAML flows, native screenshots/video)
-- [ ] **PLAT-03** *(P4)*: iOS simulator surface: `simctl` lifecycle + idb primitives for grounding, Maestro as input/compat layer
-- [ ] **PLAT-04** *(P4)*: WebView-aware mobile loops: readiness probes, animation/network/render-idle before capture (double-lag handling); boot/screenshot failures auto-classified `INFRA_FLAKE`
-- [ ] **PLAT-05** *(P4)*: Version-pinned runner images (Xcode/emulators) with deliberate upgrades behind canary runs
+- [x] **PLAT-01** *(P1)*: Web surface runs through Playwright with viewport projects matching bet-client's config (desktop + mobile viewports)
+- [x] **PLAT-02** *(P4)*: Android emulator surface via Maestro (YAML flows, native screenshots/video)
+- [x] **PLAT-03** *(P4)*: iOS simulator surface: `simctl` lifecycle + idb primitives for grounding, Maestro as input/compat layer
+- [x] **PLAT-04** *(P4)*: WebView-aware mobile loops: readiness probes, animation/network/render-idle before capture (double-lag handling); boot/screenshot failures auto-classified `INFRA_FLAKE`
+- [x] **PLAT-05** *(P4)*: Version-pinned runner images (Xcode/emulators) with deliberate upgrades behind canary runs
 
 ### Flake Governance & Trends
 
