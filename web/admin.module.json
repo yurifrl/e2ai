@@ -57,6 +57,61 @@
         "playwright",
         "verdict"
       ]
+    },
+    {
+      "id": "plans",
+      "title": {
+        "en-US": "Test Plans",
+        "pt-BR": "Planos de Teste",
+        "es": "Planes de Prueba",
+        "ro": "Planuri de Test"
+      },
+      "route": "/e2ai/plans",
+      "icon": "file-text",
+      "section": "operations",
+      "keywords": [
+        "plans",
+        "test plans",
+        "steps",
+        "sync"
+      ]
+    },
+    {
+      "id": "approvals",
+      "title": {
+        "en-US": "Approvals",
+        "pt-BR": "Aprovações",
+        "es": "Aprobaciones",
+        "ro": "Aprobări"
+      },
+      "route": "/e2ai/approvals",
+      "icon": "check-circle",
+      "section": "operations",
+      "keywords": [
+        "approvals",
+        "queue",
+        "approve",
+        "reject",
+        "pending"
+      ]
+    },
+    {
+      "id": "corpus",
+      "title": {
+        "en-US": "Behavior Corpus",
+        "pt-BR": "Corpus de Comportamentos",
+        "es": "Corpus de Comportamientos",
+        "ro": "Corpus de Comportamente"
+      },
+      "route": "/e2ai/corpus",
+      "icon": "database",
+      "section": "operations",
+      "keywords": [
+        "corpus",
+        "behaviors",
+        "learnings",
+        "playwright"
+      ]
     }
   ],
   "permissions": {
