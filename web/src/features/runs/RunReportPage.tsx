@@ -1,13 +1,14 @@
 /**
  * Report viewer: live report assembled from the report-data endpoint.
  * Failure detail (message + evidence) first, then the full filmstrip of
- * per-test step timelines with screenshot links.
+ * per-test step timelines with screenshot links, then the agentic
+ * trajectory (phase 5, T3) when the run carried agent sessions.
  */
 import { Link, useParams } from 'react-router-dom'
 import { useI18n } from '@nsxbet/admin-sdk'
 import { useMemo } from 'react'
 import { getRunReport } from '../../lib/api'
-import type { TestOutcome, TestResult } from '../../lib/types'
+import type { TrajectorySession, TestOutcome, TestResult } from '../../lib/types'
 import { usePolling } from '../../lib/usePolling'
 import { formatDuration, shortSha } from './format'
 import { StatusChip, VerdictChip } from './chips'
@@ -110,8 +111,111 @@ export function RunReportPage() {
           ))}
         </div>
       </section>
+
+      {data.trajectory && data.trajectory.length > 0 ? (
+        <section>
+          <div className="mb-2 flex items-baseline gap-3">
+            <h2 className="font-medium">{t('report.trajectory')}</h2>
+            {data.agent_summary ? (
+              <span className="text-xs text-muted-foreground">
+                {t('report.agentCost', { cost: formatCost(data.agent_summary.total_cost_millicents) })}
+              </span>
+            ) : null}
+          </div>
+          <div className="space-y-4">
+            {data.trajectory.map((session) => (
+              <TrajectoryCard key={session.session_id} session={session} />
+            ))}
+          </div>
+        </section>
+      ) : null}
     </div>
   )
+}
+
+/** Renders a jsonb payload (decision/action) as a one-line JSON preview. */
+function compactJson(payload: unknown): string {
+  if (payload == null) return ''
+  if (typeof payload === 'string') return payload
+  try {
+    return JSON.stringify(payload)
+  } catch {
+    return String(payload)
+  }
+}
+
+function formatCost(millicents: number): string {
+  return `$${(millicents / 100_000).toFixed(4)}`
+}
+
+const STEP_KIND_TONE: Record<string, string> = {
+  navigate: 'text-sky-600 dark:text-sky-400',
+  act: 'text-violet-600 dark:text-violet-400',
+  observe: 'text-muted-foreground',
+  judge: 'text-amber-600 dark:text-amber-400',
+  assert: 'text-emerald-600 dark:text-emerald-400',
+  error: 'text-red-600 dark:text-red-400',
+}
+
+function TrajectoryCard({ session }: { session: TrajectorySession }) {
+  const { t } = useI18n('e2ai')
+  return (
+    <div className="rounded-lg border">
+      <div className="flex flex-wrap items-center gap-3 border-b px-4 py-3 text-sm">
+        <span className="font-medium">{session.role}</span>
+        <span className="text-muted-foreground">{session.status}</span>
+        <span className="text-muted-foreground">
+          {session.steps_used} {t('trajectory.steps')}
+          {session.truncated ? ` · ${t('trajectory.truncated')}` : ''}
+        </span>
+        <span className="font-mono text-xs text-muted-foreground">{session.session_id}</span>
+        <span className="ml-auto font-mono text-xs">{formatCost(session.cost_millicents)}</span>
+      </div>
+      <ol className="divide-y">
+        {session.steps.map((step) => (
+          <li key={step.idx} className="px-4 py-2 text-sm">
+            <div className="flex items-baseline gap-2">
+              <span className="font-mono text-xs text-muted-foreground">#{step.idx}</span>
+              <span className={`text-xs font-medium ${STEP_KIND_TONE[step.kind] ?? ''}`}>
+                {step.kind}
+              </span>
+            </div>
+            {compactJson(step.decision) ? (
+              <p className="mt-1 break-all font-mono text-xs text-muted-foreground">
+                {compactJson(step.decision)}
+              </p>
+            ) : null}
+            {compactJson(step.action) ? (
+              <p className="mt-1 break-all font-mono text-xs">{compactJson(step.action)}</p>
+            ) : null}
+            {step.evidence.length > 0 ? (
+              <div className="mt-1 flex flex-wrap gap-2">
+                {step.evidence.map((ref, i) => (
+                  <EvidenceLink key={`${ref.path}:${i}`} ref_={ref} />
+                ))}
+              </div>
+            ) : null}
+            <div className="mt-1 font-mono text-[10px] text-muted-foreground">
+              {step.tokens_in}/{step.tokens_out} tok · {formatCost(step.cost_millicents)}
+            </div>
+          </li>
+        ))}
+      </ol>
+    </div>
+  )
+}
+
+function EvidenceLink({ ref_ }: { ref_: { kind: string; path: string; url: string | null } }) {
+  const { t } = useI18n('e2ai')
+  const label = `${t('trajectory.evidence')} · ${ref_.kind} · ${ref_.path.split('/').pop()}`
+  if (ref_.url) {
+    return (
+      <a href={ref_.url} target="_blank" rel="noreferrer" className="text-xs text-primary hover:underline">
+        {label}
+      </a>
+    )
+  }
+  return <span className="text-xs text-muted-foreground">{label}</span>
 }
 
 function FailureCard({ failure }: { failure: TestResult }) {

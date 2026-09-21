@@ -27,6 +27,13 @@ import type {
   CorpusData,
   CorpusBehavior,
   CorpusLearning,
+  FlakeRate,
+  QuarantineActivateRequest,
+  QuarantineEntry,
+  FlipRate,
+  History,
+  RunCost,
+  TrendAlerts,
 } from './types'
 
 export class ApiError extends Error {
@@ -156,4 +163,57 @@ export function promoteLearning(learningId: string): Promise<CorpusBehavior> {
 
 export function dismissLearning(learningId: string): Promise<CorpusLearning> {
   return postJson(`/api/corpus/learnings/${encodeURIComponent(learningId)}/dismiss`, {})
+}
+
+/* ------------------------------------------------------------------ */
+/* Phase 5: flake governance (rates + quarantine), trends (flips,      */
+/* history, cost, alerts) and trajectory consumption. Quarantine       */
+/* mutations are the human-gated queue actions; 409 means the test is   */
+/* already quarantined.                                                */
+/* ------------------------------------------------------------------ */
+
+export function getFlakeRates(appId: string, window?: number): Promise<FlakeRate[]> {
+  const w = window ? `&window=${window}` : ''
+  return getJson(`/api/flakes?app_id=${encodeURIComponent(appId)}${w}`)
+}
+
+export function getQuarantine(
+  appId: string,
+  status?: 'active' | 'lifted',
+): Promise<QuarantineEntry[]> {
+  const s = status ? `&status=${status}` : ''
+  return getJson(`/api/quarantine?app_id=${encodeURIComponent(appId)}${s}`)
+}
+
+export function activateQuarantine(
+  request: QuarantineActivateRequest,
+): Promise<QuarantineEntry> {
+  return postJson('/api/quarantine', request)
+}
+
+export function liftQuarantine(id: string): Promise<QuarantineEntry> {
+  return postJson(`/api/quarantine/${encodeURIComponent(id)}/lift`, {})
+}
+
+export function getFlipRate(appId: string, window?: number): Promise<FlipRate> {
+  const w = window ? `&window=${window}` : ''
+  return getJson(`/api/trends/flips?app_id=${encodeURIComponent(appId)}${w}`)
+}
+
+export function getHistory(appId: string, window?: number): Promise<History> {
+  const w = window ? `&window=${window}` : ''
+  return getJson(`/api/trends/history?app_id=${encodeURIComponent(appId)}${w}`)
+}
+
+export function getRunCost(runId: string): Promise<RunCost> {
+  return getJson(`/api/trends/cost/${encodeURIComponent(runId)}`)
+}
+
+export function getAlerts(appId: string, unacknowledgedOnly = true): Promise<TrendAlerts> {
+  const u = unacknowledgedOnly ? 'true' : 'false'
+  return getJson(`/api/trends/alerts?app_id=${encodeURIComponent(appId)}&unacknowledged=${u}`)
+}
+
+export function acknowledgeAlert(id: string): Promise<{ acknowledged: boolean }> {
+  return postJson(`/api/trends/alerts/${encodeURIComponent(id)}/acknowledge`, {})
 }

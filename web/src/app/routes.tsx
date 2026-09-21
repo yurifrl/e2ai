@@ -6,6 +6,9 @@ import { PlansListPage } from '../features/plans/PlansListPage'
 import { PlanDetailPage } from '../features/plans/PlanDetailPage'
 import { ApprovalsQueuePage } from '../features/plans/ApprovalsQueuePage'
 import { CorpusPage } from '../features/corpus/CorpusPage'
+import { FlakesPage } from '../features/quality/FlakesPage'
+import { TrendsPage } from '../features/quality/TrendsPage'
+import { CorpusHealthPage } from '../features/quality/CorpusHealthPage'
 
 // Route targets are relative to the module mount (routeBase `/e2ai` in
 // admin.module.json). The shell mounts the module under
@@ -42,6 +45,18 @@ export function routes(): RouteObject[] {
     {
       path: 'corpus',
       element: <CorpusPage />,
+    },
+    {
+      path: 'quality',
+      element: <FlakesPage />,
+    },
+    {
+      path: 'trends',
+      element: <TrendsPage />,
+    },
+    {
+      path: 'corpus-health',
+      element: <CorpusHealthPage />,
     },
   ]
 }

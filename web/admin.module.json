@@ -112,6 +112,61 @@
         "learnings",
         "playwright"
       ]
+    },
+    {
+      "id": "quality",
+      "title": {
+        "en-US": "Flakes & Quarantine",
+        "pt-BR": "Flakes e Quarentena",
+        "es": "Flakes y Cuarentena",
+        "ro": "Flakes și Carantină"
+      },
+      "route": "/e2ai/quality",
+      "icon": "shield",
+      "section": "operations",
+      "keywords": [
+        "flakes",
+        "quarantine",
+        "flaky tests",
+        "rate"
+      ]
+    },
+    {
+      "id": "trends",
+      "title": {
+        "en-US": "Trends",
+        "pt-BR": "Tendências",
+        "es": "Tendencias",
+        "ro": "Tendințe"
+      },
+      "route": "/e2ai/trends",
+      "icon": "trending-up",
+      "section": "operations",
+      "keywords": [
+        "trends",
+        "flip rate",
+        "history",
+        "cost",
+        "alerts"
+      ]
+    },
+    {
+      "id": "corpus-health",
+      "title": {
+        "en-US": "Corpus Health",
+        "pt-BR": "Saúde do Corpus",
+        "es": "Salud del Corpus",
+        "ro": "Starea Corpusului"
+      },
+      "route": "/e2ai/corpus-health",
+      "icon": "activity",
+      "section": "operations",
+      "keywords": [
+        "corpus health",
+        "stale",
+        "promotion queue",
+        "learnings"
+      ]
     }
   ],
   "permissions": {
