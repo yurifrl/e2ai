@@ -1,0 +1,38 @@
+# APPS-03: second-app onboarding template. Copy to registry/betweb.yaml, fill in
+# the real values, and boot — a second app is yaml + config, zero code changes.
+# Field names mirror the registered_apps DDL one-to-one; see
+# api/internal/app/service.go (App struct) for the validating loader. A
+# malformed file is a hard boot error (config-as-code).
+owner: YOUR-ORG
+repo: betweb
+# The GitHub Actions workflow e2ai reconciles and re-validates (webhook
+# trigger_source). Must exist in the repo at workflow_path.
+workflow_name: deploy-web
+workflow_path: .github/workflows/deploy-web.yml
+# One registry file per (workflow, environment) pair — add another file for a
+# second environment.
+environment: staging
+# Runs are matched to this app by the workflow run's display_title. Same
+# filter contract the ingest stage re-validates server-side.
+display_title_pattern: "[BetWeb] Deploy to"
+# Optional post-deploy probe used by readiness; omit when the app has none.
+health_url: https://staging.betweb.example/health
+# Surfaces the plans may target. Vocabulary locked with the TS driver seam:
+# web | android | ios (pre-phase-4 rows surface as web).
+surfaces: [web]
+# Where the app's declarative plans live (PLAN-02): plans live in the app's
+# own repo under e2ai/plans. For a central plans repo use:
+#   kind: central_repo
+#   repo: YOUR-ORG/e2ai-plans
+plans_source:
+  kind: repo_path
+  path: e2ai/plans
+# Future phases (columns reserved in registered_apps): omit until used.
+# corpus_root: null
+# 1Password ref — plaintext secrets never stored in the registry. The ingest
+# stage honors per-app refs and falls back to the shared E2AI env secret when
+# the column is NULL.
+webhook_secret_ref: op://SRE Team/e2ai/github_webhook_secret
+# Sticky PR comment anchor (REPT-02): find-and-update by this marker. Must be
+# unique per app so comment updates never cross apps.
+comment_marker: "<!-- e2ai:run:betweb-web -->"
