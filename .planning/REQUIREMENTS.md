@@ -16,7 +16,7 @@ Requirements for initial release. Each maps to a roadmap phase (P1–P5 per rese
 
 - [x] **APPS-01** *(P1)*: Per-app config-as-code registration: repo, deploy workflow name, surfaces, environments, plans source, corpus root
 - [x] **APPS-02** *(P1)*: bet-app registered as the first app — web surface, staging environment
-- [ ] **APPS-03** *(P5)*: Multi-app onboarding scaffold: adding a new app is a registry row + config, no code changes (`adminx`-style)
+- [x] **APPS-03** *(P5)*: Multi-app onboarding scaffold: adding a new app is a registry row + config, no code changes (`adminx`-style)
 
 ### Deploy Ingest
 
@@ -31,10 +31,10 @@ Requirements for initial release. Each maps to a roadmap phase (P1–P5 per rese
 
 - [x] **VERD-01** *(P1)*: Verdict engine with fixed taxonomy `PASS / FAIL / FLAKY / INFRA_ERROR / INCONCLUSIVE`; verdicts derive from evidence + run state, never exit codes alone
 - [x] **REPT-01** *(P1)*: Live HTML reports with screenshots and plain-language explanations (annotated screenshot canvas as chosen design; filmstrip = step timeline)
-- [ ] **REPT-02** *(P1)*: Failure classification answers one question per failure: app bug, test/expectation gap, agent flake, or infra
+- [x] **REPT-02** *(P1)*: Failure classification answers one question per failure: app bug, test/expectation gap, agent flake, or infra
 
 - [x] **REPT-03** *(P1)*: Sticky PR comment (one, updated per run) + neutral status check — the check is informational, never a failing gate
-- [ ] **REPT-04** *(P3)*: Agentic run reports carry agent trajectory, per-step evidence citations, and verdicts that cite machine-checkable evidence or render `INCONCLUSIVE`
+- [x] **REPT-04** *(P3)*: Agentic run reports carry agent trajectory, per-step evidence citations, and verdicts that cite machine-checkable evidence or render `INCONCLUSIVE`
 
 - [x] **SECR-01** *(P1)*: Secrets hygiene: credentials kept out of screenshots, logs, fixture metadata, and reports
 ### Test Plans & Approvals
@@ -52,14 +52,14 @@ Requirements for initial release. Each maps to a roadmap phase (P1–P5 per rese
 
 - [x] **CORP-01** *(P2)*: Expected-behavior store seeded from existing Playwright specs — first cut of the verdict oracle
 - [x] **CORP-02** *(P2)*: Agent observations auto-capture as unverified learnings; humans promote to verified baselines with provenance — no self-mutating corpus
-- [ ] **CORP-03** *(P5)*: Corpus-health page: coverage of the app's critical paths, stale behaviors, promotion queue
+- [x] **CORP-03** *(P5)*: Corpus-health page: coverage of the app's critical paths, stale behaviors, promotion queue
 
 ### Agent Roster & Run Loop
 
-- [ ] **AGNT-01** *(P3)*: Fixed roster with governed handoffs: Navigator (driver), Vision Judge (verifier), Plan Author (authoring), Edge-case Hunter (bounded exploration), Flakiness Analyst (stability)
+- [x] **AGNT-01** *(P3)*: Fixed roster with governed handoffs: Navigator (driver), Vision Judge (verifier), Plan Author (authoring), Edge-case Hunter (bounded exploration), Flakiness Analyst (stability)
 - [x] **AGNT-02** *(P3)*: Session orchestrator: River queue, heartbeat/wake, append-only run log, atomic run claiming, orphan recovery
-- [ ] **AGNT-03** *(P3)*: Navigator: a11y-tree-grounded locator-first navigation on web (Playwright + Stagehand), vision used to verify — not to click blind
-- [ ] **AGNT-04** *(P3)*: Vision Judge: separate agent, independent context (different model family for high-stakes verdicts), oracle = expected-behavior store; deterministic side-effect assertions alongside VLM judgment
+- [x] **AGNT-03** *(P3)*: Navigator: a11y-tree-grounded locator-first navigation on web (Playwright + Stagehand), vision used to verify — not to click blind
+- [x] **AGNT-04** *(P3)*: Vision Judge: separate agent, independent context (different model family for high-stakes verdicts), oracle = expected-behavior store; deterministic side-effect assertions alongside VLM judgment
 - [x] **AGNT-05** *(P3)*: All model traffic routes through the company aihub gateway; no provider keys in agents
 
 ### Budgets & Safety
@@ -78,11 +78,11 @@ Requirements for initial release. Each maps to a roadmap phase (P1–P5 per rese
 
 ### Flake Governance & Trends
 
-- [ ] **FLAK-01** *(P5)*: Flakiness Analyst: run-history flake rates per test/app, evidence-gated retries (never blind re-runs of `APP_BUG`), quarantine
-- [ ] **FLAK-02** *(P5)*: Stale detection + selector-repair proposals as human-reviewable diffs — refuse-to-heal gate (never heals below confidence floor, never on error pages)
-- [ ] **TREN-01** *(P5)*: Trends dashboard: verdict-flip rate as alerting metric, run history, cost per run/agent
-- [ ] **MCP-01** *(P5)*: MCP surface for coding agents: query runs, failures, and evidence from a PR session
-- [ ] **EDGE-01** *(P5)*: Edge-case Hunter formalized with bounded scheduled sweeps (opt-in per app) — unbounded exploration stays an anti-feature
+- [x] **FLAK-01** *(P5)*: Flakiness Analyst: run-history flake rates per test/app, evidence-gated retries (never blind re-runs of `APP_BUG`), quarantine
+- [x] **FLAK-02** *(P5)*: Stale detection + selector-repair proposals as human-reviewable diffs — refuse-to-heal gate (never heals below confidence floor, never on error pages)
+- [x] **TREN-01** *(P5)*: Trends dashboard: verdict-flip rate as alerting metric, run history, cost per run/agent
+- [x] **MCP-01** *(P5)*: MCP surface for coding agents: query runs, failures, and evidence from a PR session
+- [x] **EDGE-01** *(P5)*: Edge-case Hunter formalized with bounded scheduled sweeps (opt-in per app) — unbounded exploration stays an anti-feature
 
 ## Coverage
 
