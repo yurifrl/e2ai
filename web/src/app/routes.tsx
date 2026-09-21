@@ -23,6 +23,10 @@ export function routes(): RouteObject[] {
       element: <RunsListPage />,
     },
     {
+      path: 'runs',
+      element: <RunsListPage />,
+    },
+    {
       path: 'runs/:id',
       element: <RunDetailPage />,
     },
