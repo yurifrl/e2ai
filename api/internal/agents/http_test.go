@@ -215,7 +215,8 @@ func TestIdentityWall(t *testing.T) {
 // enqueue 409s; unknown run 404; non-executing run 409; missing approval 409.
 func TestEnqueue(t *testing.T) {
 	pool := testPool(t)
-	runIDp := seedRun(t, pool); runID := uuid.UUID(runIDp.Bytes)
+	runIDp := seedRun(t, pool)
+	runID := uuid.UUID(runIDp.Bytes)
 	seedApprovedPlan(t, pool, runID)
 	srv := serveAgents(t, pool, "")
 
@@ -262,7 +263,8 @@ func TestEnqueue(t *testing.T) {
 	}
 
 	// A run with no approved resolution is a 409.
-	otherp := seedRun(t, pool); other := uuid.UUID(otherp.Bytes)
+	otherp := seedRun(t, pool)
+	other := uuid.UUID(otherp.Bytes)
 	setRunStatus(t, pool, other, "executing")
 	if code, _ := call(t, "POST", srv.URL+"/api/runs/"+other.String()+"/agent-sessions", "", "admin", "admin.e2ai.edit"); code != http.StatusConflict {
 		t.Errorf("enqueue without approved plan = %d, want 409", code)

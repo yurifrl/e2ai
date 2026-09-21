@@ -18,6 +18,7 @@ import (
 	"github.com/NSXBet/e2ai/api/internal/app"
 	"github.com/NSXBet/e2ai/api/internal/approvals"
 	"github.com/NSXBet/e2ai/api/internal/derive"
+	"github.com/NSXBet/e2ai/api/internal/flakes"
 	"github.com/NSXBet/e2ai/api/internal/ingest"
 	"github.com/NSXBet/e2ai/api/internal/plans"
 	"github.com/NSXBet/e2ai/api/internal/platform/config"
@@ -27,6 +28,7 @@ import (
 	"github.com/NSXBet/e2ai/api/internal/platform/river"
 	"github.com/NSXBet/e2ai/api/internal/report"
 	"github.com/NSXBet/e2ai/api/internal/suite"
+	"github.com/NSXBet/e2ai/api/internal/trends"
 	"github.com/jackc/pgx/v5"
 )
 
@@ -172,7 +174,15 @@ func run() error {
 		}
 		queueRef.Set(riverClient)
 		canaryWorker.Queue = riverClient // late-bound like QueueRef; set before Start
-		webhook = ingest.NewHandler(cfg.WebhookSecret, apps, store, riverClient, logger)
+		webhook = ingest.NewHandler(cfg.WebhookSecret, apps, store, riverClient, logger).
+			// APPS-03: per-app webhook secrets — resolve every registry
+			// app's op:// ref at boot (SECR-01: the vault CLI renders
+			// secrets, never Go); apps whose ref fails to render fall
+			// back to the shared secret.
+			WithSecretResolver(ctx, ingest.OpSecretResolver(), apps).
+			// EDGE-01: signature-valid deliveries from unknown apps are
+			// recorded for admin triage instead of silently dropped.
+			WithTriage(ingest.NewTriage(pool.Pool))
 
 		if err := riverClient.Start(ctx); err != nil {
 			return err
@@ -235,6 +245,21 @@ func run() error {
 		agentsSurface = agents.NewAgentsHTTP(pool.Pool, runnerToken)
 	}
 
+	// FLAK-01/02 flake-governance surface: flake-rate analytics + the
+	// quarantine store. Same degraded posture — unmounted when postgres
+	// is down.
+	var flakesSurface *flakes.QuarantineHTTP
+	if pool != nil {
+		flakesSurface = flakes.NewQuarantineHTTP(pool.Pool)
+	}
+
+	// TREN-01 trends surface: verdict-flip rate, per-run agent cost, and
+	// pass/fail history aggregations. Same degraded posture.
+	var trendsSurface *trends.TrendsHTTP
+	if pool != nil {
+		trendsSurface = trends.NewTrendsHTTP(pool.Pool)
+	}
+
 	handler := httpx.IdentityWithConfig(
 		httpx.IdentityConfig{DevFallbackUser: cfg.DevFallbackUser},
 		httpx.RequestLog(httpx.RedactSecrets(logger, map[string]string{
@@ -242,7 +267,7 @@ func run() error {
 			"GITHUB_TOKEN":              cfg.GitHubToken,
 			"E2AI_REPORT_LINK_SECRET":   cfg.ReportLinkSecret,
 			"E2AI_RUNNER_SERVICE_TOKEN": runnerToken,
-		}), newMux(dbHealth, webhook, runsSurface, plansSurface, approvalsSurface, agentsSurface, pool, riverClient)),
+		}), newMux(dbHealth, webhook, runsSurface, plansSurface, approvalsSurface, agentsSurface, flakesSurface, trendsSurface, pool, riverClient)),
 	)
 	server := &http.Server{
 		Addr:              ":" + strconv.Itoa(cfg.Port),
@@ -270,7 +295,7 @@ func run() error {
 
 // newMux returns the api HTTP surface: liveness/health, the GitHub webhook,
 // and (when postgres is up) the T11 runs + artifacts surface.
-func newMux(dbHealth func() bool, webhook http.Handler, runs *report.RunsHTTP, plans *plans.PlansHTTP, approvals *approvals.ApprovalsHTTP, agentSessions *agents.AgentsHTTP, pool *postgres.Pool, riverClient *river.Client) http.Handler {
+func newMux(dbHealth func() bool, webhook http.Handler, runs *report.RunsHTTP, plans *plans.PlansHTTP, approvals *approvals.ApprovalsHTTP, agentSessions *agents.AgentsHTTP, flakesSurface *flakes.QuarantineHTTP, trendsSurface *trends.TrendsHTTP, pool *postgres.Pool, riverClient *river.Client) http.Handler {
 	mux := http.NewServeMux()
 	mux.HandleFunc("/healthz", func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
@@ -303,6 +328,14 @@ func newMux(dbHealth func() bool, webhook http.Handler, runs *report.RunsHTTP, p
 	if approvals != nil {
 		// Approvals surface (APPR-01/02): queue + attributed decisions.
 		approvals.Mount(mux)
+	}
+	if flakesSurface != nil {
+		// Flake governance surface (FLAK-01/02): rates + quarantine.
+		flakesSurface.Mount(mux)
+	}
+	if trendsSurface != nil {
+		// Trends analytics surface (TREN-01).
+		trendsSurface.Mount(mux)
 	}
 	if agentSessions != nil {
 		// Agents surface (AGNT-03): runner lifecycle (service token), the

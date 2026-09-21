@@ -70,13 +70,13 @@ type AgentSessionWorker struct {
 
 	Command []string
 
-	APIBase       string
-	ServiceToken  string
-	AIHUBBase     string
-	AIHUBToken    string
-	ArtifactsDir  string
-	RoleModels    map[Role]string
-	WorkerID      string
+	APIBase      string
+	ServiceToken string
+	AIHUBBase    string
+	AIHUBToken   string
+	ArtifactsDir string
+	RoleModels   map[Role]string
+	WorkerID     string
 }
 
 // Work drives the session. It always returns nil: every outcome lands in the
@@ -142,7 +142,7 @@ type sessionRuntime struct {
 	runStatus   string
 	// surface is the run's target surface (Phase 4). runs.surface is not
 	// null (default 'web'), so this is always populated.
-	surface     string
+	surface string
 }
 
 func (w *AgentSessionWorker) loadSession(id pgtype.UUID) (sessionRuntime, error) {

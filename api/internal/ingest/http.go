@@ -65,11 +65,20 @@ func waitRolloutOpts() *river.InsertOpts {
 // Handler serves POST /github/webhook/ (the admin-bff forwards GitHub's
 // delivery): verify signature → match a registered app → filter → ingest.
 type Handler struct {
-	secret   string
-	matchers matchers
-	store    IngestStore
-	queue    JobEnqueuer
-	logger   *slog.Logger
+	secret     string            // shared fallback (unresolved app refs, legacy wiring)
+	appSecrets map[string]string // per-app rendered webhook secret, keyed by app identity (APPS-03)
+	matchers   matchers
+	store      IngestStore
+	queue      JobEnqueuer
+	triage     TriageStore // optional; nil disables unknown-delivery recording
+	logger     *slog.Logger
+}
+
+// appSecretKey identifies an app's secret row: the registry upsert keys on
+// (owner, repo, workflow_name, environment), so that tuple names the app
+// uniquely across re-seeding.
+func appSecretKey(a app.App) string {
+	return a.Owner + "/" + a.Repo + "/" + a.WorkflowName + "/" + a.Environment
 }
 
 // IngestStore is the transactional ingest path (dedupe.go). The indirection
@@ -78,17 +87,77 @@ type IngestStore interface {
 	Ingest(ctx context.Context, seed RunSeed, queue JobEnqueuer) (Result, error)
 }
 
-// NewHandler wires the webhook. secret is the rendered WEBHOOK_SECRET; an
-// empty secret fails closed — every delivery gets a 503 rather than an
-// unverifiable pass (SECR-01).
+// WithTriage attaches the unknown-delivery store (EDGE-01): signature-valid
+// deliveries no app claims are recorded for admin triage instead of being
+// silently ignored. Wire before serving; not safe to mutate concurrently
+// with requests.
+func (h *Handler) WithTriage(store TriageStore) *Handler {
+	h.triage = store
+	return h
+}
+
+// SecretResolver renders an op:// webhook_secret_ref to plaintext (SECR-01:
+// the vault CLI renders secrets; Go only carries the rendered result).
+type SecretResolver func(ctx context.Context, ref string) (string, error)
+
+// NewHandler wires the webhook. secret is the rendered shared WEBHOOK_SECRET
+// (fallback for apps whose webhook_secret_ref is missing or unresolved);
+// per-app secrets attach later via WithSecretResolver (APPS-03: an op://
+// ref resolved at boot — `op inject`/`op read` render secrets, never Go).
+// No secret anywhere fails closed — every delivery gets a 503 rather than
+// an unverifiable pass (SECR-01).
 func NewHandler(secret string, apps []app.App, store IngestStore, queue JobEnqueuer, logger *slog.Logger) *Handler {
 	return &Handler{
-		secret:   secret,
-		matchers: compileMatchers(apps, logger),
-		store:    store,
-		queue:    queue,
-		logger:   logger,
+		secret:     secret,
+		appSecrets: map[string]string{},
+		matchers:   compileMatchers(apps, logger),
+		store:      store,
+		queue:      queue,
+		logger:     logger,
 	}
+}
+
+// WithSecretResolver resolves every registered app's webhook_secret_ref at
+// wiring time (boot) into the per-app secret map. Resolution failures
+// degrade THAT app to the shared secret with a warning — never a panic or a
+// boot failure: an app with an unreachable vault entry must not take the
+// whole ingest surface down.
+func (h *Handler) WithSecretResolver(ctx context.Context, resolver SecretResolver, apps []app.App) *Handler {
+	for _, a := range apps {
+		if a.WebhookSecretRef == "" || resolver == nil {
+			continue
+		}
+		secret, err := resolver(ctx, a.WebhookSecretRef)
+		if err != nil || secret == "" {
+			h.logger.Warn("webhook secret resolution failed; falling back to shared secret",
+				"app", appSecretKey(a), "ref", a.WebhookSecretRef, "error", err)
+			continue
+		}
+		h.appSecrets[appSecretKey(a)] = secret
+	}
+	return h
+}
+
+// verifyAppSignature checks the signature against the candidate secrets of
+// ONE matched app: its per-app secret first, the shared secret as fallback
+// when the per-app secret is absent. Per-app isolation means another app's
+// secret never accepts this app's delivery. Returns the matched app.
+func (h *Handler) verifyAppSignature(payload webhookPayload, body []byte, header string) (matcher, bool) {
+	m, ok := h.matchers.match(payload.Workflow.Name, payload.WorkflowRun.DisplayTitle)
+	if !ok {
+		return matcher{}, false
+	}
+	candidates := []string{}
+	if perApp := h.appSecrets[appSecretKey(m.app)]; perApp != "" {
+		candidates = append(candidates, perApp)
+	}
+	candidates = append(candidates, h.secret)
+	for _, secret := range candidates {
+		if verifySignature(secret, body, header) {
+			return m, true
+		}
+	}
+	return matcher{}, false
 }
 
 // ServeHTTP implements the GitHub webhook contract: raw-body HMAC-SHA256
@@ -100,7 +169,7 @@ func (h *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		httpError(w, http.StatusMethodNotAllowed, "webhook is POST-only")
 		return
 	}
-	if h.secret == "" || h.store == nil {
+	if h.store == nil || !h.secretsConfigured() {
 		httpError(w, http.StatusServiceUnavailable, "ingest unavailable")
 		return
 	}
@@ -113,10 +182,6 @@ func (h *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		httpError(w, http.StatusRequestEntityTooLarge, "body too large")
 		return
 	}
-	if !verifySignature(h.secret, body, r.Header.Get("X-Hub-Signature-256")) {
-		httpError(w, http.StatusForbidden, "signature mismatch")
-		return
-	}
 	delivery := r.Header.Get("X-GitHub-Delivery")
 	if delivery == "" {
 		httpError(w, http.StatusBadRequest, "missing X-GitHub-Delivery")
@@ -126,16 +191,26 @@ func (h *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		respondJSON(w, http.StatusAccepted, "ignored")
 		return
 	}
+	// Per-app secrets (APPS-03) force match-before-verify: the payload names
+	// the app whose secret applies. Parsing untrusted JSON is safe; the HMAC
+	// below is what gates trust.
 	var payload webhookPayload
 	if err := json.Unmarshal(body, &payload); err != nil {
 		httpError(w, http.StatusBadRequest, "malformed payload")
 		return
 	}
-	m, ok := h.matchers.match(payload.Workflow.Name, payload.WorkflowRun.DisplayTitle)
+	m, ok := h.verifyAppSignature(payload, body, r.Header.Get("X-Hub-Signature-256"))
 	if !ok {
-		h.logger.Debug("webhook delivery ignored: no matching app",
-			"workflow", payload.Workflow.Name, "display_title", payload.WorkflowRun.DisplayTitle)
-		respondJSON(w, http.StatusAccepted, "ignored")
+		// Signature-valid but app-unknown deliveries are the EDGE-01 triage
+		// queue's input; everything else fails closed with 403. Without a
+		// wired triage store the legacy "ignored" answer stands — the
+		// delivery was never actionable either way.
+		if h.verifiedAgainstAny(body, r.Header.Get("X-Hub-Signature-256")) {
+			h.recordTriage(delivery, payload, body)
+			respondJSON(w, http.StatusAccepted, "triaged")
+		} else {
+			httpError(w, http.StatusForbidden, "signature mismatch")
+		}
 		return
 	}
 	seed := seedFromWebhook(m.app, delivery, body, payload)
@@ -151,6 +226,55 @@ func (h *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		respondJSON(w, http.StatusOK, "accepted")
 	default: // ResultDuplicateEvent, ResultDuplicateRun, ResultRecorded
 		respondJSON(w, http.StatusAccepted, result.String())
+	}
+}
+
+// secretsConfigured reports whether any verify-capable secret exists. With
+// none, every delivery would 403 forever — a 503 for missing boot config is
+// the honest signal (SECR-01 fail closed).
+func (h *Handler) secretsConfigured() bool {
+	if h.secret != "" {
+		return true
+	}
+	for _, secret := range h.appSecrets {
+		if secret != "" {
+			return true
+		}
+	}
+	return false
+}
+
+// verifiedAgainstAny reports whether the signature verifies against ANY
+// configured secret. Only used for app-unknown deliveries, where per-app
+// isolation cannot apply because no app is named by the registry match.
+func (h *Handler) verifiedAgainstAny(body []byte, header string) bool {
+	for _, secret := range h.appSecrets {
+		if secret != "" && verifySignature(secret, body, header) {
+			return true
+		}
+	}
+	return verifySignature(h.secret, body, header)
+}
+
+// recordTriage files an unknown-delivery row for admin triage (EDGE-01).
+// Triage failures never fail the request — the delivery is still 202'd so
+// GitHub does not retry-storm an acknowledged event; the log carries the
+// loss instead.
+func (h *Handler) recordTriage(delivery string, payload webhookPayload, body []byte) {
+	if h.triage == nil {
+		h.logger.Debug("webhook delivery ignored: no matching app",
+			"workflow", payload.Workflow.Name, "display_title", payload.WorkflowRun.DisplayTitle)
+		return
+	}
+	err := h.triage.RecordUnknownDelivery(context.Background(), UnknownDelivery{
+		DeliveryID:    delivery,
+		WorkflowName:  payload.Workflow.Name,
+		DisplayTitle:  payload.WorkflowRun.DisplayTitle,
+		WorkflowRunID: payload.WorkflowRun.ID,
+		Payload:       body,
+	})
+	if err != nil {
+		h.logger.Error("webhook triage record failed", "error", err, "delivery", delivery)
 	}
 }
 

@@ -14,8 +14,8 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/NSXBet/e2ai/api/internal/platform/httpx"
 	"github.com/NSXBet/e2ai/api/internal/plans"
+	"github.com/NSXBet/e2ai/api/internal/platform/httpx"
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/jackc/pgx/v5/pgxpool"
@@ -50,6 +50,10 @@ func (s *AgentsHTTP) Mount(mux *http.ServeMux) {
 	}))
 	mux.HandleFunc("POST /api/agent-sessions/{id}/kill", s.Kill)
 	mux.HandleFunc("GET /api/agent-sessions", s.List)
+	// Phase 5 wave-1 runner data reads (runner-token gated): the corpus
+	// oracle and the approved plan steps (DB-mediated handoff).
+	mux.HandleFunc("GET /api/agent/corpus/behaviors", s.CorpusBehavior)
+	mux.HandleFunc("GET /api/agent-sessions/{id}/plan", s.SessionPlan)
 }
 
 type okDTO struct {

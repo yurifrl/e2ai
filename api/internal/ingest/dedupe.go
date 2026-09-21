@@ -24,6 +24,7 @@ import (
 const (
 	TriggerWebhook   = "webhook"
 	TriggerReconcile = "reconcile"
+	TriggerSweep     = "sweep" // edge-sweep triggered runs (EDGE-01, 0007)
 )
 
 // Result is the outcome of one ingest attempt.
@@ -98,7 +99,7 @@ type RunSeed struct {
 	RunNumber      int
 	HeadSHA        string
 	HeadBranch     string
-	PRNumber       int // PR attached to the workflow_run; 0 = none (derive falls back to head-SHA resolution)
+	PRNumber       int    // PR attached to the workflow_run; 0 = none (derive falls back to head-SHA resolution)
 	TriggerSource  string // TriggerWebhook | TriggerReconcile
 	SignatureValid bool
 	Payload        []byte

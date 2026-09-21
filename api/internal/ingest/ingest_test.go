@@ -217,19 +217,20 @@ func TestHandlerFiltersNonDeployDeliveries(t *testing.T) {
 			seeds:  1,
 		},
 		// No matching app: nothing can be attributed (webhook_events.app_id is
-		// NOT NULL), so the delivery is ignored outright.
+		// NOT NULL), but a signature-valid delivery is too valuable to drop
+		// silently — it lands in the admin triage queue (EDGE-01) instead.
 		"unmatched display title": {
 			payload: mustJSON(map[string]any{"workflow": map[string]any{"name": "Release - Web"},
 				"workflow_run": dispatchRun(9004, "Release v1.2.3", "workflow_dispatch", "success")}),
 			event:  "workflow_run",
-			status: "ignored",
+			status: "triaged",
 			seeds:  0,
 		},
 		"unregistered workflow": {
 			payload: mustJSON(map[string]any{"workflow": map[string]any{"name": "Other Workflow"},
 				"workflow_run": dispatchRun(9005, "[BetWeb] Deploy to staging", "workflow_dispatch", "success")}),
 			event:  "workflow_run",
-			status: "ignored",
+			status: "triaged",
 			seeds:  0,
 		},
 	}
