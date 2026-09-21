@@ -20,6 +20,7 @@ import (
 	"github.com/NSXBet/e2ai/api/internal/derive"
 	"github.com/NSXBet/e2ai/api/internal/flakes"
 	"github.com/NSXBet/e2ai/api/internal/ingest"
+	"github.com/NSXBet/e2ai/api/internal/mcp"
 	"github.com/NSXBet/e2ai/api/internal/plans"
 	"github.com/NSXBet/e2ai/api/internal/platform/config"
 	"github.com/NSXBet/e2ai/api/internal/platform/github"
@@ -279,6 +280,13 @@ func run() error {
 		trendsSurface = trends.NewTrendsHTTP(pool.Pool)
 	}
 
+	// MCP surface (MCP-01): read-only JSON-RPC for coding agents in PRs.
+	// Same degraded posture.
+	var mcpSurface *mcp.Surface
+	if pool != nil {
+		mcpSurface = mcp.New(pool.Pool, runnerToken, cfg.ReportBaseURL, cfg.ReportLinkSecret)
+	}
+
 	handler := httpx.IdentityWithConfig(
 		httpx.IdentityConfig{DevFallbackUser: cfg.DevFallbackUser},
 		httpx.RequestLog(httpx.RedactSecrets(logger, map[string]string{
@@ -286,7 +294,7 @@ func run() error {
 			"GITHUB_TOKEN":              cfg.GitHubToken,
 			"E2AI_REPORT_LINK_SECRET":   cfg.ReportLinkSecret,
 			"E2AI_RUNNER_SERVICE_TOKEN": runnerToken,
-		}), newMux(dbHealth, webhook, runsSurface, plansSurface, approvalsSurface, agentsSurface, flakesSurface, trendsSurface, pool, riverClient)),
+		}), newMux(dbHealth, webhook, runsSurface, plansSurface, approvalsSurface, agentsSurface, flakesSurface, trendsSurface, mcpSurface, pool, riverClient)),
 	)
 	server := &http.Server{
 		Addr:              ":" + strconv.Itoa(cfg.Port),
@@ -314,7 +322,7 @@ func run() error {
 
 // newMux returns the api HTTP surface: liveness/health, the GitHub webhook,
 // and (when postgres is up) the T11 runs + artifacts surface.
-func newMux(dbHealth func() bool, webhook http.Handler, runs *report.RunsHTTP, plans *plans.PlansHTTP, approvals *approvals.ApprovalsHTTP, agentSessions *agents.AgentsHTTP, flakesSurface *flakes.QuarantineHTTP, trendsSurface *trends.TrendsHTTP, pool *postgres.Pool, riverClient *river.Client) http.Handler {
+func newMux(dbHealth func() bool, webhook http.Handler, runs *report.RunsHTTP, plans *plans.PlansHTTP, approvals *approvals.ApprovalsHTTP, agentSessions *agents.AgentsHTTP, flakesSurface *flakes.QuarantineHTTP, trendsSurface *trends.TrendsHTTP, mcpSurface *mcp.Surface, pool *postgres.Pool, riverClient *river.Client) http.Handler {
 	mux := http.NewServeMux()
 	mux.HandleFunc("/healthz", func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
@@ -355,6 +363,10 @@ func newMux(dbHealth func() bool, webhook http.Handler, runs *report.RunsHTTP, p
 	if trendsSurface != nil {
 		// Trends analytics surface (TREN-01).
 		trendsSurface.Mount(mux)
+	}
+	if mcpSurface != nil {
+		// MCP read-only surface (MCP-01): JSON-RPC for coding agents.
+		mcpSurface.Mount(mux)
 	}
 	if agentSessions != nil {
 		// Agents surface (AGNT-03): runner lifecycle (service token), the
