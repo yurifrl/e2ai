@@ -546,6 +546,8 @@ func (s *PlansHTTP) Mount(mux *http.ServeMux) {
 	mux.HandleFunc("GET /api/corpus", s.ListCorpus)
 	mux.HandleFunc("POST /api/corpus/learnings/{learningID}/promote", s.PromoteLearning)
 	mux.HandleFunc("POST /api/corpus/learnings/{learningID}/dismiss", s.DismissLearning)
+	// FLAK-02 repair review queue (admin, identity-gated): list + one-shot decide.
+	s.mountRepair(mux)
 }
 
 // nullableUUIDPtr renders a pgtype.UUID pointer as string|null.

@@ -38,7 +38,7 @@ func testPool(t *testing.T) *pgxpool.Pool {
 	}
 	// Tests assume a clean slate: repeated runs against one scratch database
 	// must not see fixtures from earlier runs.
-	for _, table := range []string{"corpus_learnings", "corpus_behaviors", "runs", "registered_apps"} {
+	for _, table := range []string{"corpus_repair_proposals", "corpus_learnings", "corpus_behaviors", "runs", "registered_apps"} {
 		if _, err := pool.Exec(ctx, "truncate table "+table+" cascade"); err != nil {
 			t.Fatalf("truncate %s: %v", table, err)
 		}

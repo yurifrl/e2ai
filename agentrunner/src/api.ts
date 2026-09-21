@@ -6,11 +6,16 @@
 // gated; payload shapes are validated on arrival — malformed JSON from the
 // control plane is an ApiError, never silently trusted.
 //
+// Phase 5 T7 (FLAK-02) adds POST /api/agent-sessions/{id}/repair-proposals:
+// the navigator's selector-repair proposal intake (report-only, additive).
+//
 // Auth: `Authorization: Bearer <E2AI_RUNNER_SERVICE_TOKEN>` (st_-style
 // runner service token path in httpx).
 // 409 on ANY call → KilledError: the session was killed (kill switch,
 // BUDG-02); the loop must exit immediately and cleanly (clean exit
 // semantics — no retry, no fail call, exit code carries the reason).
+
+import type { RepairSuggestion } from "./repair.js";
 
 export class KilledError extends Error {
   constructor(message: string) {
@@ -131,6 +136,51 @@ function parseBehaviorPayload(body: unknown): BehaviorPayload {
   return { app_id: b["app_id"], key: b["key"], status: b["status"], content: b["content"], provenance: b["provenance"] };
 }
 
+/** Stored repair-proposal row — JSON encoding of Go agents.repairProposalWireDTO
+ * (snake_case on the wire; decided fields null until a human decides). */
+export interface RepairProposalPayload {
+  id: string;
+  learning_id: string;
+  app_id: string;
+  behavior_key: string;
+  broken_selector: string;
+  proposed_selector: string;
+  rationale: string;
+  confidence: number;
+  evidence_ref: string;
+  status: string;
+  proposed_by: string;
+  decided_by: string | null;
+  created_at: string;
+}
+
+function parseRepairProposalPayload(body: unknown): RepairProposalPayload {
+  if (typeof body !== "object" || body === null) {
+    throw new ApiError("repair proposal payload is not an object", 0);
+  }
+  const p = body as Record<string, unknown>;
+  const required = ["id", "learning_id", "app_id", "behavior_key", "broken_selector", "proposed_selector", "rationale", "status", "proposed_by", "created_at"] as const;
+  const bad = required.find((k) => typeof p[k] !== "string");
+  if (bad !== undefined || typeof p["confidence"] !== "number") {
+    throw new ApiError("repair proposal payload missing required fields", 0);
+  }
+  return {
+    id: p["id"] as string,
+    learning_id: p["learning_id"] as string,
+    app_id: p["app_id"] as string,
+    behavior_key: p["behavior_key"] as string,
+    broken_selector: p["broken_selector"] as string,
+    proposed_selector: p["proposed_selector"] as string,
+    rationale: p["rationale"] as string,
+    confidence: p["confidence"] as number,
+    evidence_ref: typeof p["evidence_ref"] === "string" ? p["evidence_ref"] : "",
+    status: p["status"] as string,
+    proposed_by: p["proposed_by"] as string,
+    decided_by: typeof p["decided_by"] === "string" ? p["decided_by"] : null,
+    created_at: p["created_at"] as string,
+  };
+}
+
 /** One appended trajectory row — column semantics from 0004_agents.sql session_steps:
  * idx (gapless per-session sequence), kind (navigate|act|observe|judge|assert|error),
  * decision/action/evidence jsonb, tokens_in/out, cost_millicents. Append-only. */
@@ -191,6 +241,23 @@ export class AgentApi {
     });
   }
 
+  /** FLAK-02: submit a selector-repair proposal for human review (report-only;
+   * the control plane owns the refuse-to-heal re-check and returns 422 below
+   * the floor). Body mirrors Go agents.repairProposalRequest, response the
+   * stored proposal row (agents.repairProposalWireDTO). Callers gate through
+   * repair.healDecision first — this method performs no local validation. */
+  async proposeRepair(sessionId: string, suggestion: RepairSuggestion): Promise<RepairProposalPayload> {
+    const body = await this.postJSON(`/api/agent-sessions/${sessionId}/repair-proposals`, {
+      behavior_key: suggestion.behaviorKey,
+      broken_selector: suggestion.brokenSelector,
+      proposed_selector: suggestion.proposedSelector,
+      rationale: suggestion.rationale,
+      confidence: suggestion.confidence,
+      evidence_ref: suggestion.evidenceRef ?? "",
+    });
+    return parseRepairProposalPayload(body);
+  }
+
   async complete(sessionId: string): Promise<void> {
     await this.post(`/api/agent-sessions/${sessionId}/complete`);
   }
@@ -221,6 +288,35 @@ export class AgentApi {
     }
     if (!res.ok) {
       throw new ApiError(`agent api ${path} returned ${res.status}`, res.status);
+    }
+  }
+
+  /** Same transport/auth/409 contract as post, but decodes a JSON body. */
+  private async postJSON(path: string, body: unknown): Promise<unknown> {
+    let res: Response;
+    try {
+      res = await this.cfg.fetchImpl(`${this.cfg.baseUrl}${path}`, {
+        method: "POST",
+        headers: {
+          "content-type": "application/json",
+          authorization: `Bearer ${this.cfg.serviceToken}`,
+        },
+        body: JSON.stringify(body ?? {}),
+        signal: AbortSignal.timeout(this.cfg.timeoutMs),
+      });
+    } catch (err) {
+      throw new ApiError(`agent api transport failure on ${path}: ${err instanceof Error ? err.message : String(err)}`, 0);
+    }
+    if (res.status === 409) {
+      throw new KilledError(`session killed: ${path} rejected with 409`);
+    }
+    if (!res.ok) {
+      throw new ApiError(`agent api ${path} returned ${res.status}`, res.status);
+    }
+    try {
+      return await res.json();
+    } catch (err) {
+      throw new ApiError(`agent api ${path} returned non-JSON body: ${err instanceof Error ? err.message : String(err)}`, 0);
     }
   }
 

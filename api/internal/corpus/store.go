@@ -266,8 +266,22 @@ func PromoteLearning(ctx context.Context, pool *pgxpool.Pool, id pgtype.UUID, ve
 	}
 	defer func() { _ = tx.Rollback(ctx) }()
 
+	b, err := promoteLearningTx(ctx, tx, id, verifiedBy)
+	if err != nil {
+		return nil, err
+	}
+	if err := tx.Commit(ctx); err != nil {
+		return nil, fmt.Errorf("corpus: commit promote: %w", err)
+	}
+	return b, nil
+}
+
+// promoteLearningTx is the promote body over an open transaction — shared by
+// the manual REST flow and the repair-proposal approval path, so approval can
+// never introduce a second corpus write semantics.
+func promoteLearningTx(ctx context.Context, tx pgx.Tx, id pgtype.UUID, verifiedBy string) (*Behavior, error) {
 	var l Learning
-	err = tx.QueryRow(ctx, `
+	err := tx.QueryRow(ctx, `
 		select app_id, run_id, observation, status from corpus_learnings where id = $1`, id).
 		Scan(&l.AppID, &l.RunID, &l.Observation, &l.Status)
 	if errors.Is(err, pgx.ErrNoRows) {
@@ -327,9 +341,6 @@ func PromoteLearning(ctx context.Context, pool *pgxpool.Pool, id pgtype.UUID, ve
 	if tag.RowsAffected() == 0 {
 		// Lost a race against a concurrent decision.
 		return nil, ErrAlreadyPromoted
-	}
-	if err := tx.Commit(ctx); err != nil {
-		return nil, fmt.Errorf("corpus: commit promote: %w", err)
 	}
 	return b, nil
 }

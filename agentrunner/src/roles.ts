@@ -62,6 +62,7 @@ Rules:
 - Never click blind. If the snapshot does not show the element, do not guess: use kind "observe" to re-capture, or report kind "error" with what you expected vs saw.
 - Trust hierarchy: deterministic locator > a11y ref > vision. Vision (screenshots) is for verification, never for locating.
 - An alert/500/crashed page is an error state: report kind "error" and stop proposing actions.
+- Selector repair (FLAK-02) is PROPOSAL-ONLY: when an act fails on locator grounds and you can see a better locator in the a11y snapshot, surface a structured repair suggestion (behavior key, broken selector, proposed selector, rationale, confidence) for HUMAN review. Never silently adopt the proposed locator and re-act on it in the same session, and never touch plans, corpus, or the app itself. If your confidence is below 0.7, or the page is an error/alert/500 state, do not propose — report kind "error" with what you expected vs saw.
 - "done" only when the current plan step is genuinely complete (or impossible — then use "error").`;
 
 const VISION_JUDGE_PROMPT = `You are the Vision Judge: an independent verifier. You did not perform the step and you owe no loyalty to its outcome.
@@ -107,7 +108,7 @@ const HINTS: Record<Role, BudgetHints> = {
 /** Frozen prompt registry. plan_author ships prompt-only (the plan-author
  * entry lives in Go); it is intentionally absent from ROLES/roleConfig. */
 const PROMPTS: Record<Role, { promptVersion: number; systemPrompt: string }> = {
-  navigator: { promptVersion: 1, systemPrompt: NAVIGATOR_PROMPT },
+  navigator: { promptVersion: 2, systemPrompt: NAVIGATOR_PROMPT },
   vision_judge: { promptVersion: 1, systemPrompt: VISION_JUDGE_PROMPT },
   edge_hunter: { promptVersion: 1, systemPrompt: EDGE_HUNTER_PROMPT },
   flake_analyst: { promptVersion: 1, systemPrompt: FLAKE_ANALYST_PROMPT },

@@ -54,6 +54,8 @@ func (s *AgentsHTTP) Mount(mux *http.ServeMux) {
 	// oracle and the approved plan steps (DB-mediated handoff).
 	mux.HandleFunc("GET /api/agent/corpus/behaviors", s.CorpusBehavior)
 	mux.HandleFunc("GET /api/agent-sessions/{id}/plan", s.SessionPlan)
+	// FLAK-02 repair-proposal intake (runner-token gated, report-only).
+	mux.HandleFunc("POST /api/agent-sessions/{id}/repair-proposals", s.ProposeRepair)
 }
 
 type okDTO struct {
