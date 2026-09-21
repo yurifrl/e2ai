@@ -32,6 +32,8 @@ func (s *TrendsHTTP) Mount(mux *http.ServeMux) {
 	mux.HandleFunc("GET /api/trends/flips", s.FlipRateHandler)
 	mux.HandleFunc("GET /api/trends/cost/{runId}", s.CostHandler)
 	mux.HandleFunc("GET /api/trends/history", s.HistoryHandler)
+	mux.HandleFunc("GET /api/trends/alerts", s.AlertsHandler)
+	mux.HandleFunc("POST /api/trends/alerts/{id}/acknowledge", s.AcknowledgeHandler)
 }
 
 // FlipRateHandler serves GET /api/trends/flips?app_id=&window=.
@@ -157,4 +159,51 @@ func queryInt(r *http.Request, key string, fallback int) int {
 		return fallback
 	}
 	return v
+}
+
+// AlertsHandler serves GET /api/trends/alerts — the TREN-01 alert queue,
+// newest first, filterable by app_id and unacknowledged-only.
+func (s *TrendsHTTP) AlertsHandler(w http.ResponseWriter, r *http.Request) {
+	if !gate(w, r, false) {
+		return
+	}
+	var appID *pgtype.UUID
+	if raw := r.URL.Query().Get("app_id"); raw != "" {
+		id, err := pgUUIDFromString(raw)
+		if err != nil {
+			writeErr(w, http.StatusBadRequest, "invalid app_id")
+			return
+		}
+		appID = &id
+	}
+	alerts, err := ListAlerts(r.Context(), s.Pool, appID, r.URL.Query().Get("unacknowledged") == "true", queryInt(r, "limit", 50))
+	if err != nil {
+		writeErr(w, http.StatusInternalServerError, "read alerts failed")
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]any{"alerts": alerts})
+}
+
+// AcknowledgeHandler serves POST /api/trends/alerts/{id}/acknowledge — the
+// alert queue's single write, edit-permission gated. 404 on unknown ids;
+// re-acking an acknowledged alert is idempotent 200.
+func (s *TrendsHTTP) AcknowledgeHandler(w http.ResponseWriter, r *http.Request) {
+	if !gate(w, r, true) {
+		return
+	}
+	id, err := pgUUIDFromString(r.PathValue("id"))
+	if err != nil {
+		writeErr(w, http.StatusBadRequest, "invalid alert id")
+		return
+	}
+	applied, exists, err := AcknowledgeAlert(r.Context(), s.Pool, id)
+	if err != nil {
+		writeErr(w, http.StatusInternalServerError, "acknowledge failed")
+		return
+	}
+	if !exists {
+		writeErr(w, http.StatusNotFound, "alert not found")
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]any{"acknowledged": true, "applied": applied})
 }

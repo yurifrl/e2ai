@@ -26,6 +26,7 @@ var migrationsFS embed.FS
 // migration tables owned by this package, in drop order for Down (children
 // before parents; app_migrations last).
 var appTables = []string{
+	"alert_events",                      // phase-5 hardening schema (0008)
 	"webhook_triage", "test_quarantine", // phase-5 hardening schema (0007)
 	"pr_comments", "artifacts", "test_results", "corpus_learnings",
 	"session_steps", "agent_sessions", // phase-3 agent schema (0004)

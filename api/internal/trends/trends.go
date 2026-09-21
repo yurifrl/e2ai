@@ -1,7 +1,9 @@
 // Package trends owns the TREN-01 aggregations over real run history:
 // verdict-flip rate (same app, bounded window), per-run agent cost (the
 // agent_sessions accumulators with their step evidence counted), and the
-// pass/fail history series. All read-only — trends never writes.
+// pass/fail history series. All read-only — trends never writes — except
+// the alert queue's acknowledge action (TREN-01 alerting, alerts.go): an
+// admin-visible alert queue without an ack action would drain nobody.
 package trends
 
 import (

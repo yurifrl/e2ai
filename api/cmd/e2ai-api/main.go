@@ -137,6 +137,15 @@ func run() error {
 		// fresh queued session is requeued atomically.
 		river.AddWorker[agents.SweepArgs](workers, &agents.SweepWorker{Pool: pool.Pool, Logger: logger})
 
+		// Edge sweeps (EDGE-01, T4): per-app opt-in cadence from the
+		// registry — the 60s tick only bounds how long a due app waits
+		// past its own interval.
+		river.AddWorker[agents.EdgesweepArgs](workers, &agents.EdgesweepWorker{Pool: pool.Pool, Logger: logger})
+
+		// Flake Analyst trigger (FLAK-01/02, T4): flake-rate threshold
+		// crossings fire alerts + analyst sessions, cooldown-deduped.
+		river.AddWorker[agents.FlakesTickArgs](workers, &agents.FlakesTickWorker{Pool: pool.Pool, Logger: logger})
+
 		// Image canary (PLAT-05): slow-cadence periodic job that runs a
 		// candidate runner image through the real pinning path (creates a
 		// run, enqueues execute with the pinned image). Inert unless
@@ -147,8 +156,18 @@ func run() error {
 
 		var periodic []*river.PeriodicJob
 		periodic = append(periodic, river.NewPeriodicJob(
-			agents.SweepInterval(),
+			agents.EdgesweepInterval(),
 			func() river.JobArgs { return agents.SweepArgs{} },
+			true,
+		))
+		periodic = append(periodic, river.NewPeriodicJob(
+			agents.EdgesweepInterval(),
+			func() river.JobArgs { return agents.EdgesweepArgs{} },
+			true,
+		))
+		periodic = append(periodic, river.NewPeriodicJob(
+			agents.FlakesTickInterval(),
+			func() river.JobArgs { return agents.FlakesTickArgs{} },
 			true,
 		))
 		periodic = append(periodic, river.NewPeriodicJob(
