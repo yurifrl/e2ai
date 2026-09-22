@@ -56,6 +56,16 @@ An arm of testers always reporting live, never blocking: every deploy produces r
 
 **Model substrate.** Company AI gateway — no direct provider keys; agent model choices flow through it.
 
+## Current Milestone: v1.1 Admin Cockpit
+
+**Goal:** Move every control-plane action of the QA arm (triggering apps, webhook handling, job operations) out of ad-hoc API/script calls and into the authenticated admin UI.
+
+**Target features:**
+- Cockpit: admin section to trigger apps/plans directly (manual trigger, today webhook|reconcile|sweep sources only)
+- Admin action surface: every outside action (webhook simulate, agent enqueue, MCP probe, GitHub redelivery) becomes an admin UI action
+- Webhook inbox: admin view of incoming webhook deliveries with retry
+- Sync jobs: observe and control the River sync/periodic job system
+
 ## Constraints
 
 - **Tech stack**: Shared admin conventions — React + RTK feature slices (web), hexagonal Go domains (api), Postgres, Connect-RPC, Tilt/K8s — the module must register in the shared admin shell like its siblings.
