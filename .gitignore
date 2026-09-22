@@ -1,0 +1,4 @@
+# Layer files are personal/env-specific overrides, never committed.
+# Secrets live in 1Password (declared in secretspec.toml), not on disk.
+.env*
+secrets/

@@ -146,20 +146,20 @@ func getEnvDuration(key string, fallback time.Duration) (time.Duration, error) {
 	return parsed, nil
 }
 
-// repoRoot walks up from cwd to the directory containing .env (the repo root),
-// so binaries work from any working directory depth.
+// repoRoot walks up from cwd to the directory containing secretspec.toml (the
+// repo root), so binaries work from any working directory depth.
 func repoRoot() string {
 	dir, err := os.Getwd()
 	if err != nil {
 		return "."
 	}
 	for {
-		if _, err := os.Stat(filepath.Join(dir, ".env")); err == nil {
+		if _, err := os.Stat(filepath.Join(dir, "secretspec.toml")); err == nil {
 			return dir
 		}
 		parent := filepath.Dir(dir)
 		if parent == dir {
-			return "." // no .env anywhere up the tree; repoRoot is cwd
+			return "." // no secretspec.toml anywhere up the tree; repoRoot is cwd
 		}
 		dir = parent
 	}

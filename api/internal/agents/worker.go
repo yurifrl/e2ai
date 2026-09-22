@@ -61,7 +61,8 @@ var runHealthyStatuses = map[string]bool{
 // AgentSessionWorker spawns and supervises one agentrunner child per job.
 // Command is the spawn prefix, e.g. []string{"node", "/app/agentrunner.mjs"} —
 // the worker appends --session/--role. ServiceToken arrives already resolved
-// from its op:// ref via .env (SECR-01: `op inject` renders it, never Go).
+// in the process env (secretspec → 1Password locally, env-to-secret bridge in
+// the cluster — SECR-01: secrets are rendered before process start, never Go).
 type AgentSessionWorker struct {
 	river.WorkerDefaults[AgentSessionArgs]
 

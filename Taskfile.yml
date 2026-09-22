@@ -1,0 +1,96 @@
+version: '3'
+silent: false
+
+# Wraps every command the README documents. Secrets resolve through
+# SecretSpec → 1Password (vault "SRE Team", item "e2ai"), declared in
+# secretspec.toml; layer files (.env.$ENV, .env.$USER.local) remain
+# runtime overrides on top of the injected environment.
+
+tasks:
+  secrets:check:
+    desc: Verify every secret declared in secretspec.toml resolves from 1Password
+    cmds:
+      - secretspec check --reason "task secrets:check — verify manifest resolves from the vault"
+
+  stack:
+    desc: Bring up the Tilt dev stack (postgres :5434, admin BFF :8080)
+    cmds:
+      - tilt up
+
+  api:
+    desc: Run the Go control plane as a bare process on :8082
+    dir: api
+    cmds:
+      - secretspec run -- go run ./cmd/e2ai-api
+
+  web:
+    desc: Admin module UI dev server on :3005
+    dir: web
+    cmds:
+      - bun install --frozen-lockfile 2>/dev/null || bun install
+      - bun run dev
+
+  webhook:simulate:
+    desc: Fire a workflow_run delivery at the local api (same HMAC path GitHub uses)
+    preconditions:
+      - sh: test -f secrets/webhook_payload.json
+        msg: "put your workflow_run event JSON at secrets/webhook_payload.json first"
+    cmds:
+      - |
+        SECRET=$(secretspec run -- printenv WEBHOOK_SECRET)
+        BODY=$(cat secrets/webhook_payload.json)
+        SIG=$(printf '%s' "$BODY" | openssl dgst -sha256 -hmac "$SECRET" -hex | sed 's/.* //')
+        curl -s localhost:8082/github/webhook \
+          -H "Content-Type: application/json" \
+          -H "X-GitHub-Event: workflow_run" \
+          -H "X-Hub-Signature-256: sha256=$SIG" \
+          -H "X-GitHub-Delivery: local-$(date +%s)" \
+          -d "$BODY"
+
+  agent:enqueue:
+    desc: Enqueue the agent roster on a run (needs admin identity + approved plan)
+    cmds:
+      - curl -s -X POST localhost:8082/api/runs/{{.RUN_ID}}/agent-sessions
+    requires:
+      vars: [RUN_ID]
+
+  mcp:probe:
+    desc: Probe the read-only MCP surface (tools/list) — needs the api on :8082
+    cmds:
+      - |
+        TOKEN=$(secretspec run -- printenv E2AI_RUNNER_SERVICE_TOKEN)
+        curl -s localhost:8082/mcp -X POST -H "Authorization: Bearer $TOKEN" \
+          -d '{"jsonrpc":"2.0","id":1,"method":"tools/list"}'
+
+  testdb:
+    desc: Create the scratch test database (e2ai_test) — once, before api:test
+    cmds:
+      - psql postgres://e2ai:e2ai@localhost:5434/postgres -c 'create database e2ai_test'
+
+  api:build:
+    desc: Build + vet the Go control plane
+    dir: api
+    cmds:
+      - go build ./... && go vet ./...
+
+  api:test:
+    desc: Go suite against e2ai_test (serial, destructive migrate)
+    dir: api
+    cmds:
+      - E2AI_TEST_DATABASE_URL=postgres://e2ai:e2ai@localhost:5434/e2ai_test?sslmode=disable go test ./... -p 1 -count=1
+    preconditions:
+      - sh: psql postgres://e2ai:e2ai@localhost:5434/e2ai_test -c 'select 1' >/dev/null
+        msg: "scratch database e2ai_test missing — run `task testdb`"
+
+  agentrunner:test:
+    desc: Typecheck + test the TS agent roster
+    dir: agentrunner
+    cmds:
+      - bun install --frozen-lockfile 2>/dev/null || bun install
+      - bun run typecheck && bun run test
+
+  web:build:
+    desc: Build the admin module + validate its manifest
+    dir: web
+    cmds:
+      - bun run build && bun run validate:manifest

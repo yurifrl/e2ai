@@ -29,7 +29,7 @@ GitHub deploy ──▶ api (Go control plane) ──▶ suite container (Playwr
 
 ## 1. Start it
 
-Prerequisites: **Go 1.26+**, **Node 24+**, **Bun**, **Docker**, and [Tilt](https://tilt.dev) with a local Kubernetes cluster (OrbStack, Rancher Desktop, kind — anything Tilt can drive).
+Prerequisites: **Go 1.26+**, **Node 24+**, **Bun**, **Docker**, [Tilt](https://tilt.dev) with a local Kubernetes cluster (OrbStack, Rancher Desktop, kind — anything Tilt can drive), the **1Password desktop app** (signed in), and [go-task](https://taskfile.dev). Every command below is wrapped in the repo's `Taskfile.yml` — `task --list` shows the surface, and each task's commands are right there in the file when you want to see exactly what runs.
 
 ```bash
 tilt up
@@ -40,34 +40,21 @@ brings up:
 - `postgres` on `localhost:5434`
 - the admin BFF shell on `localhost:8080` (serves the UI)
 
-The api runs as a bare process next to the stack (the BFF forwards `/e2ai/*` to it):
+The api runs as a bare process next to the stack (the BFF forwards `/e2ai/*` to it). Its environment is **declarative**: `secretspec.toml` commits only the declarations — values live in 1Password (company account `nsx-team.1password.com`, vault `SRE Team`, item `e2ai`) and resolve at process start via [SecretSpec](https://secretspec.dev) with the `onepassword://nsx-team.1password.com@SRE Team` provider:
 
 ```bash
-# .env at the repo root — the api auto-loads it (godotenv) at boot
-cat > .env <<'EOF'
-DATABASE_URL=postgres://e2ai:e2ai@localhost:5434/e2ai?sslmode=disable
-DEV_FALLBACK_USER=you@example.com     # local-only identity; never set this in staging/prod
-REGISTRY_DIR=./registry
-E2AI_ARTIFACTS_DIR=/tmp/e2ai/artifacts
-E2AI_REPORT_BASE_URL=http://localhost:8080/e2ai
-E2AI_REPORT_LINK_SECRET=dev-link-secret
-LOG_LEVEL=info
-# GITHUB_TOKEN=…        # enables GitHub reconciliation + plan sync from a real repo
-WEBHOOK_SECRET=local-dev-secret   # shared fallback when a registry op:// ref can't resolve
-E2AI_RUNNER_SERVICE_TOKEN=dev-runner-token   # gates MCP + the runner lifecycle endpoints
-EOF
-
-cd api && go run ./cmd/e2ai-api   # listens on :8082
+task secrets:check   # every declared secret must resolve
+task api             # == secretspec run -- go run ./cmd/e2ai-api  (listens on :8082)
 ```
 
-Env layering: `.env` base, then `.env.$ENV`, then `.env.$USER.local` (later layers override) — the same resolved env a pod sees via the `local/env-to-secret.sh` bridge.
+Env layering: secretspec injects the manifest values first, then the api layers `.env.$ENV`, then `.env.$USER.local` on top (later layers override) — personal overrides still win, and the same layer files feed the `local/env-to-secret.sh` bridge pods consume. Non-secret config (DB URL, ports, log level) needs no file: code defaults + manifest defaults cover local dev. CI uses `OP_SERVICE_ACCOUNT_TOKEN` instead of the desktop app.
 
 On boot the api **applies all migrations** and **seeds the registry** from `registry/*.yaml`. Health check: `curl localhost:8082/healthz`.
 
 Finally the UI module (Vite dev server; registered in the admin shell by `web/admin.module.json`):
 
 ```bash
-cd web && bun install && bun run dev    # :3005
+task web    # == bun install + bun run dev in web/  (Vite dev server, :3005)
 ```
 
 Open **http://localhost:8080/e2ai** — the Runs page. Empty until your first run.
@@ -128,15 +115,7 @@ The key set is **closed** — a typo'd frontmatter key is a parse error at inges
 **Trigger.** `on-deploy` plans fire from a GitHub `workflow_run` (deploy completed) webhook delivered to the api. For local iteration without GitHub, fire the same webhook yourself with a valid HMAC signature:
 
 ```bash
-# secrets/webhook_payload.json is your workflow_run event JSON
-BODY=$(cat secrets/webhook_payload.json)
-SIG=$(printf '%s' "$BODY" | openssl dgst -sha256 -hmac "local-dev-secret" -hex | sed 's/.* //')
-curl -s localhost:8082/github/webhook \
-  -H "Content-Type: application/json" \
-  -H "X-GitHub-Event: workflow_run" \
-  -H "X-Hub-Signature-256: sha256=$SIG" \
-  -H "X-GitHub-Delivery: local-$(date +%s)" \
-  -d "$BODY"
+task webhook:simulate   # signs secrets/webhook_payload.json with the vault WEBHOOK_SECRET
 ```
 
 Ingest dedupes the delivery → plans sync → derive → the run enters `executing` and the
@@ -147,7 +126,7 @@ Playwright suites → artifacts out).
 then enqueue the agent roster (navigator, vision judge, …) with:
 
 ```bash
-curl -s -X POST localhost:8082/api/runs/<runId>/agent-sessions
+task agent:enqueue RUN_ID=<runId>
 ```
 
 The gate is strict: the run must be `executing`, its plan resolution must select an
@@ -188,8 +167,7 @@ The evidence pipeline *is* the print statement:
 The api exposes a **read-only** MCP surface on `POST /mcp` (JSON-RPC, Bearer-token or BFF identity gated):
 
 ```bash
-curl -s localhost:8082/mcp -X POST -H "Authorization: Bearer dev-runner-token" \
-  -d '{"jsonrpc":"2.0","id":1,"method":"tools/list"}'
+task mcp:probe   # resolves the runner token from 1Password, lists MCP tools
 ```
 
 Tools: `list_runs`, `get_run`, `get_failure_evidence`, `get_flake_rates`, `get_quarantine`. Evidence links are token-gated and cite run ids — a PR session can pull the failing step's screenshot and verdict without dashboard access.
@@ -197,20 +175,15 @@ Tools: `list_runs`, `get_run`, `get_failure_evidence`, `get_flake_rates`, `get_q
 ## 8. Developing the platform itself
 
 ```bash
-cd api && go build ./... && go vet ./...
-
-# Tests run a destructive migrate down/up — give them their OWN database
-# (e.g. e2ai_test), never the dev database:
-psql postgres://e2ai:e2ai@localhost:5434/postgres -c 'create database e2ai_test'
-E2AI_TEST_DATABASE_URL=postgres://e2ai:e2ai@localhost:5434/e2ai_test?sslmode=disable \
-  go test ./... -p 1 -count=1        # serial: the suite shares one scratch DB
-
-cd ../agentrunner && bun install && bun run typecheck && bun run test
-cd ../web && bun run build && bun run validate:manifest
+task testdb          # once: creates the e2ai_test scratch database
+task api:test        # destructive migrate — the suite never touches the dev database
+task api:build       # go build ./... && go vet ./... in api/
+task agentrunner:test
+task web:build
 ```
 
 The agentrunner suite includes real-device smokes (Android emulator, iOS simulator) that boot hardware — expect environmental flakes on cold boots; the Go/web suites are hermetic.
 
 ## Production posture
 
-Staging config lives in `config/admin-bff.staging.yaml` (real Okta issuer, in-cluster Postgres); secrets resolve through 1Password references (`op://…`) via `local/env-to-secret.sh`. Set `E2AI_RUNNER_SERVICE_TOKEN` in any real environment — without it the api fails closed on runner endpoints. CI, container images for the api, and prod rollout are tracked platform work, not yet wired in-repo.
+Staging config lives in `config/admin-bff.staging.yaml` (real Okta issuer, in-cluster Postgres); secrets resolve through 1Password references (`op://…`), and the env-to-secret bridge (`local/env-to-secret.sh`) merges the `.env.$ENV` layer files for pods. `E2AI_RUNNER_SERVICE_TOKEN` must resolve in any real environment — without it the api fails closed on runner endpoints. CI, container images for the api, and prod rollout are tracked platform work, not yet wired in-repo. The runner-image canary stays inert unless `E2AI_CANARY_IMAGE` (optionally `E2AI_CANARY_APP`) is set — semantics documented on the constants in `api/internal/suite/canary.go`.

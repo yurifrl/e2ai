@@ -33,8 +33,12 @@ func CanaryInterval() time.Duration { return canaryInterval }
 
 const canaryInterval = 15 * time.Minute
 
-// Env vars the canary reads. Kept here so the binary's .env is the single
-// documentation point.
+// Env vars the canary reads — both plain runtime overrides, unset in every
+// real environment. Setting E2AI_CANARY_IMAGE arms the 15-minute canary job:
+// one pipeline run per tick executes the pinned image through the real
+// per-run pinning path. E2AI_CANARY_APP ("owner/repo") optionally targets one
+// app; default is the most recently registered one. (This block was formerly
+// documented in the removed .env.op template.)
 const (
 	envCanaryImage = "E2AI_CANARY_IMAGE"
 	envCanaryApp   = "E2AI_CANARY_APP"

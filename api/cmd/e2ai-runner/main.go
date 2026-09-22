@@ -85,8 +85,9 @@ func run() error {
 
 	// e2ai:agent:session worker (Phase 3 T4): spawns one ephemeral
 	// agentrunner child per queued agent session. Service token arrives
-	// already resolved from its op:// ref via .env (SECR-01: `op inject`
-	// renders secrets, never Go). Optional in dev; missing gateway wiring
+	// already resolved in the process env (secretspec → 1Password locally,
+	// env-to-secret bridge in the cluster — SECR-01: `op read`/`op inject`
+	// render secrets, never Go). Optional in dev; missing gateway wiring
 	// logs a warning but leaves the worker mounted so sessions still drive
 	// (the child itself fails fast and the session records why).
 	runnerToken := os.Getenv("E2AI_RUNNER_SERVICE_TOKEN")
