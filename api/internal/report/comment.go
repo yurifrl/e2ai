@@ -75,13 +75,17 @@ type appRef struct {
 // runFacts is one run's publish snapshot: identity, GitHub pointers and
 // the detail view (per-test attachments, duration) the comment renders.
 type runFacts struct {
-	App        appRef
-	RunID      uuid.UUID
-	HeadSHA    string
-	DurationMS int64
-	CheckRunID pgtype.Int8
-	Rep        verdict.Report
-	Detail     *runs.RunDetail
+	App     appRef
+	RunID   uuid.UUID
+	HeadSHA string
+	// TriggerSource gates the PR-comment leg (T3): manual/simulate runs
+	// never patch a sticky comment — a deploy run on the same SHA keeps
+	// its report identity untouched.
+	TriggerSource string
+	DurationMS    int64
+	CheckRunID    pgtype.Int8
+	Rep           verdict.Report
+	Detail        *runs.RunDetail
 }
 
 // commentOut is the sticky-comment write result: nil when the run had no
@@ -125,7 +129,11 @@ func (p *Publisher) Publish(ctx context.Context, pool *pgxpool.Pool, runID uuid.
 	// REPT-01: the signed report link verifies without shell auth.
 	link := ReportLink(runID, p.reportBase, p.linkSecret)
 
-	comment, err := p.publishComment(ctx, facts, link)
+	// A manual (or simulate) run never touches the deploy comment: the
+	// sticky comment is the deploy run's report identity (T3) — a retest on
+	// the same SHA must not patch or re-own it. The report link and
+	// check-run finalization still happen below.
+	comment, err := p.commentForFacts(ctx, facts, link)
 	if err != nil {
 		if !rateLimited(err) {
 			return err
@@ -142,6 +150,15 @@ func (p *Publisher) Publish(ctx context.Context, pool *pgxpool.Pool, runID uuid.
 func rateLimited(err error) bool {
 	var rle *github.RateLimitError
 	return errors.As(err, &rle)
+}
+
+// commentForFacts runs the sticky-comment leg for webhook-sourced runs only;
+// manual/simulate runs return nil (nothing published, nothing persisted).
+func (p *Publisher) commentForFacts(ctx context.Context, facts *runFacts, link string) (*commentOut, error) {
+	if facts.TriggerSource != "webhook" {
+		return nil, nil
+	}
+	return p.publishComment(ctx, facts, link)
 }
 
 // publishComment resolves the open PR for the run's head SHA and creates
@@ -209,13 +226,14 @@ func loadFacts(ctx context.Context, pool *pgxpool.Pool, runID uuid.UUID, rep ver
 		return nil, fmt.Errorf("load app %s: %w", app.ID, err)
 	}
 	return &runFacts{
-		App:        app,
-		RunID:      runID,
-		HeadSHA:    detail.Run.HeadSHA,
-		DurationMS: int64(detail.Run.DurationMS.Int32),
-		CheckRunID: detail.Run.CheckRunID,
-		Rep:        rep,
-		Detail:     detail,
+		App:           app,
+		RunID:         runID,
+		HeadSHA:       detail.Run.HeadSHA,
+		TriggerSource: detail.Run.TriggerSource,
+		DurationMS:    int64(detail.Run.DurationMS.Int32),
+		CheckRunID:    detail.Run.CheckRunID,
+		Rep:           rep,
+		Detail:        detail,
 	}, nil
 }
 

@@ -198,12 +198,13 @@ var (
 // testFacts builds a passing-run publish snapshot with an open PR.
 func testFacts(rep verdict.Report) *runFacts {
 	return &runFacts{
-		App:        appRef{ID: uuid.Must(uuid.NewRandom()), Owner: "NSXBet", Repo: "bet-app", CommentMarker: testMarker},
-		RunID:      uuid.Must(uuid.NewRandom()),
-		HeadSHA:    "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
-		DurationMS: 42_000,
-		CheckRunID: pgtype.Int8{Int64: 9001, Valid: true},
-		Rep:        rep,
+		App:           appRef{ID: uuid.Must(uuid.NewRandom()), Owner: "NSXBet", Repo: "bet-app", CommentMarker: testMarker},
+		RunID:         uuid.Must(uuid.NewRandom()),
+		HeadSHA:       "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+		TriggerSource: "webhook",
+		DurationMS:    42_000,
+		CheckRunID:    pgtype.Int8{Int64: 9001, Valid: true},
+		Rep:           rep,
 	}
 }
 
@@ -319,6 +320,37 @@ func TestPublishCreatesThenUpdatesStickyComment(t *testing.T) {
 	if (*recorded)[0].Comment.ID != (*recorded)[1].Comment.ID {
 		t.Errorf("create id %d != update id %d — sticky comment split",
 			(*recorded)[0].Comment.ID, (*recorded)[1].Comment.ID)
+	}
+}
+
+// TestPublishManualRunNeverPatchesStickyComment (T3): a manual run on the
+// same SHA as an open-PR deploy must not resolve PRs or touch the deploy's
+// sticky comment — the comment leg is webhook-only. The check-run leg still
+// finalizes (neutral) and the record call carries a nil comment.
+func TestPublishManualRunNeverTouchesStickyComment(t *testing.T) {
+	f := newFakeGH(t)
+	f.pulls["aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"] =
+		[]github.CommitPull{{Number: 7, State: "open", Title: "Deploy web"}}
+	facts := testFacts(verdict.Report{Verdict: verdict.VerdictPass, Counts: verdict.Counts{Pass: 3}})
+	facts.TriggerSource = "manual"
+	p, recorded := testPublisher(t, f, facts)
+
+	if err := p.Publish(context.Background(), nil, facts.RunID, facts.Rep); err != nil {
+		t.Fatalf("publish: %v", err)
+	}
+	if len(f.comments) != 0 {
+		t.Fatalf("manual run must not create or patch sticky comments, got %d", len(f.comments))
+	}
+	if len(f.patches) != 1 {
+		t.Fatalf("check-run must still finalize once, got %d patches", len(f.patches))
+	}
+	for _, patch := range f.patches {
+		if patch.Conclusion != "neutral" {
+			t.Fatalf("manual check-run conclusion must stay neutral: %+v", patch)
+		}
+	}
+	if len(*recorded) != 1 || (*recorded)[0].Comment != nil {
+		t.Fatalf("manual run must record nil comment, got %+v", *recorded)
 	}
 }
 

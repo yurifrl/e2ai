@@ -379,6 +379,22 @@ type planResolution struct {
 // keep the last approved version running: selection is version-scoped, so
 // the approved ancestor is selected and the change is recorded as excluded.
 func (e *Executor) resolvePlanGate(ctx context.Context, r *suiteRun, logger *slog.Logger) (planEnv []string, skip bool, err error) {
+	// Pinned runs (manual trigger, TRIG-02): the trigger stamped the
+	// operator's chosen version into run_plan_resolutions at trigger time.
+	// Reuse it verbatim — never re-resolve. A post-trigger approval change
+	// (e.g. the pinned version's approval revoked) must NOT silently swap
+	// what a pinned run executes; the pinned decision is the evidence.
+	pinned, err := e.loadPinnedResolution(ctx, r.id)
+	if err != nil {
+		return nil, false, fmt.Errorf("load pinned plan resolution: %w", err)
+	}
+	if pinned != nil {
+		env := []string{"E2AI_PLANS=" + E2AIPlansEnv(pinned.Selected)}
+		logger.Info("plan resolution: pinned manual stamp reused",
+			"selected", len(pinned.Selected))
+		return env, false, nil
+	}
+
 	rows, rerr := e.Pool.Query(ctx, `
 		select p.id,
 			coalesce((select v.version || '|' || v.content_hash
@@ -469,6 +485,27 @@ func (e *Executor) resolvePlanGate(ctx context.Context, r *suiteRun, logger *slo
 	logger.Info("plan resolution complete",
 		"selected", len(res.Selected), "excluded", len(res.Excluded))
 	return env, false, nil
+}
+
+// loadPinnedResolution returns the resolution the manual trigger stamped
+// (mode 'approved') for this run, or nil when the run has no pinned stamp —
+// deploy runs always fall through to live re-resolution.
+func (e *Executor) loadPinnedResolution(ctx context.Context, runID uuid.UUID) (*planResolution, error) {
+	var selected []byte
+	err := e.Pool.QueryRow(ctx, `
+		select selected from run_plan_resolutions
+		where run_id = $1 and mode = 'approved'`, runID).Scan(&selected)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return nil, nil
+	}
+	if err != nil {
+		return nil, err
+	}
+	res := &planResolution{Selected: []selectedPlan{}, Excluded: []excludedPlan{}}
+	if err := json.Unmarshal(selected, &res.Selected); err != nil {
+		return nil, fmt.Errorf("parse pinned selected: %w", err)
+	}
+	return res, nil
 }
 
 // recordResolution upserts the run's resolution record. Replayed jobs

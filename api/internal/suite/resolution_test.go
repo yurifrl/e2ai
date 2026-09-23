@@ -7,6 +7,7 @@ package suite
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 	"os"
 	"path/filepath"
 	"testing"
@@ -291,4 +292,50 @@ func TestE2AIPlansEnv(t *testing.T) {
 	if got != want {
 		t.Errorf("E2AIPlansEnv = %q, want %q", got, want)
 	}
+}
+
+// TestPlanGatePinnedStampSurvivesApprovalChange (TRIG-02, P4): a manual run
+// pinned at trigger time keeps the pinned version verbatim even after a
+// NEWER approved version lands — the spawn gate never re-resolves for
+// pinned runs.
+func TestPlanGatePinnedStampSurvivesApprovalChange(t *testing.T) {
+	pool := testPool(t)
+	migrate(t, pool)
+	runID := seedAppRun(t, pool)
+	appID := runApp(t, pool, runID)
+	seedPlanRow(t, pool, appID, "checkout-flow", "approved")
+	pinnedV1 := addVersion(t, pool, appID, "checkout-flow", "v1.0.0", "approved")
+	approveVersion(t, pool, pinnedV1)
+
+	// The trigger stamped its pin before the job was enqueued; then a
+	// newer approved version v2.0.0 lands post-trigger.
+	vid := planVersionID(t, pool, "checkout-flow", "v1.0.0")
+	stamp := fmt.Sprintf(
+		`[{"plan_id":"checkout-flow","version":"v1.0.0","hash":"hash-v1.0.0","source":"manual_pinned","version_id":%q}]`,
+		pinnedV1)
+	if _, err := pool.Exec(context.Background(), `
+		insert into run_plan_resolutions (run_id, plan_id, plan_version_id, content_hash, selected, mode, resolution)
+		values ($1, 'checkout-flow', $2, 'hash-v1.0.0', $3, 'approved', '{}')
+	`, runID, vid, stamp); err != nil {
+		t.Fatalf("stamp pinned resolution: %v", err)
+	}
+	addVersion(t, pool, appID, "checkout-flow", "v2.0.0", "approved")
+	approveVersion(t, pool, planVersionID(t, pool, "checkout-flow", "v2.0.0"))
+
+	e, runner := gateExecutor(t, pool, runID)
+	if err := e.Work(context.Background(), &river.Job[ExecuteArgs]{
+		Args: ExecuteArgs{RunID: runID.String()},
+	}); err != nil {
+		t.Fatalf("Work: %v", err)
+	}
+
+	// The pinned stamp is reused verbatim — v2.0.0 never displaces it.
+	for _, s := range runner.Specs {
+		for _, kv := range s.Env {
+			if kv == "E2AI_PLANS=checkout-flow@v1.0.0@hash-v1.0.0" {
+				return
+			}
+		}
+	}
+	t.Fatalf("E2AI_PLANS does not carry the pinned version v1.0.0: %+v", runner.Specs)
 }
