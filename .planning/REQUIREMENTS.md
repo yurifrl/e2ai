@@ -140,7 +140,7 @@ Defined 2026-09-22 from research (STACK/FEATURES/ARCHITECTURE/PITFALLS/SUMMARY).
 
 ### Admin Actions
 
-- [ ] **ACTN-01** *(P6)*: Simulate webhook from the cockpit: pick app + payload shape; the api server renders and HMAC-signs with the app's resolved secret (secrets never reach the browser); result shows ingest outcome + created run link
+- [x] **ACTN-01** *(P6)*: Simulate webhook from the cockpit: pick app + payload shape; the api server renders and HMAC-signs with the app's resolved secret (secrets never reach the browser); result shows ingest outcome + created run link
 - [ ] **ACTN-02** *(P8)*: Run Detail "Add agent session" with role picker, enabled only while the run is executing, surfacing the approved-plan gate inline and the budget it will consume
 - [ ] **ACTN-03** *(P8)*: Kill action on agent-session rows (Run Detail + agent rail) with reason field landing in the append-only error note; the API's 409 race semantics ("another actor finalized the session") surface verbatim
 - [ ] **ACTN-04** *(P8)*: Plans-sync is one click on the Plans page header and app cards, showing the sync result (plans added/updated)

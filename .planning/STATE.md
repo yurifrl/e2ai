@@ -5,17 +5,17 @@ milestone_name: Admin Cockpit
 current_phase: 6
 current_phase_name: Cockpit trigger, Command Center, and webhook simulate
 status: planning
-stopped_at: Completed 06-02-PLAN.md
-last_updated: "2026-09-23T09:15:32.017Z"
+stopped_at: Completed 06-03-PLAN.md
+last_updated: "2026-09-23T16:20:27.331Z"
 last_activity: 2026-09-22
 last_activity_desc: v1.1 roadmap written (4 phases; v1.0 records preserved)
-state_head: f22ff054b6bf1ee33b7986d3ba4ef0cb2932aaf3
+state_head: 977cc31c1361b4f77a13b2c7b75a0fbae47cbd17
 progress:
   total_phases: 4
-  completed_phases: 0
+  completed_phases: 5
   total_plans: 5
-  completed_plans: 2
-  percent: 20
+  completed_plans: 3
+  percent: 60
 ---
 
 # Project State
@@ -24,9 +24,9 @@ progress:
 
 Milestone: v1.1 Admin Cockpit (phases 6–9)
 Phase: 6 (Cockpit trigger, Command Center, and webhook simulate) — READY TO EXECUTE
-Plan: 2 of 5
+Plan: 3 of 5
 Status: Executing — 06-02 complete (manual trigger backend)
-Progress: [█░░░░░░░░░] 10%
+Progress: [██████░░░░] 60%
 Last activity: 2026-09-22 — v1.1 roadmap written (4 phases; v1.0 records preserved)
 
 ## Next Action
@@ -46,15 +46,18 @@ Last activity: 2026-09-22 — v1.1 roadmap written (4 phases; v1.0 records prese
 |------|----------|-------|-------|
 | Phase 06 P01 | 55m | 3 tasks | 14 files |
 | Phase 06 P02 | ~3h | 3 tasks | 13 files |
+| Phase 06 P03 | 3h | 2 tasks | 8 files |
 
 ## Decisions
 
 - [Phase 6]: Trigger concurrency gate is the 0010 partial unique index itself — INSERT-as-gate, loser surfaces 409 (no read-then-insert race)
 - [Phase 6]: Plan pins reuse verbatim at spawn; manual/simulate runs never patch the deploy sticky comment (comment leg gated on trigger_source)
 - [Phase 6]: Pause mutations answer 200 + fresh CockpitState; reason-only wire body; zero ceiling is a typed refusal (BUDG-03)
+- [Phase 6]: Feed keyset pagination: opaque base64 (stamp,uuid) cursor, predicates qualified per UNION arm (sessions arm joins runs; both carry created_at/id)
+- [Phase 6]: Cockpit budget figures reuse the gate's CapFor/DaySpend/Evaluate verbatim; uncapped apps surface as a count in the arm-wide card
 
 ## Session
 
-**Last session:** 2026-09-23T09:15:32.005Z
-**Stopped at:** Completed 06-02-PLAN.md
+**Last session:** 2026-09-23T16:20:27.314Z
+**Stopped at:** Completed 06-03-PLAN.md
 **Resume file:** None
