@@ -106,4 +106,4 @@ An arm of testers always reporting live, never blocking: every deploy produces r
 4. Update Context with current state
 
 ---
-*Last updated: 2026-09-19 after project initialization*
+*Last updated: 2026-09-22 — v1.1 Admin Cockpit opened*

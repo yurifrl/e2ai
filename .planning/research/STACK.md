@@ -1,156 +1,110 @@
-# Stack Research
+# Stack Research: v1.1 Admin Cockpit
 
-**Domain:** Agentic, vision-driven autonomous E2E QA platform (web + iOS simulator + Android emulator), deployed on every PR/release of registered apps, reporting back into GitHub PRs
-**Researched:** 2026-09-19
-**Confidence:** MEDIUM (all findings web-researched and cross-checked across ≥2 independent sources where noted; official docs reads where available; no sandbox prototyping performed)
+**Project:** E2AI (`@admin/e2ai`) — milestone v1.1 Admin Cockpit
+**Researched:** 2026-09-22
+**Confidence:** HIGH — every finding below was verified against this repo's actual code (file paths cited); River v0.47.0 APIs verified against the vendored module source at `~/go/pkg/mod/github.com/riverqueue/river@v0.47.0/`. No web-sourced claims.
+
+## The One Sentence
+
+**v1.1 requires zero new dependencies.** The cockpit is a new web feature-section plus a new Go surface package, both built strictly from patterns that already exist in this repo; the only genuinely new artifacts are one schema migration and a few new registry columns/fields.
+
+## Reality Check Against the Milestone Constraint
+
+PROJECT.md's constraint says "React + RTK feature slices (web), Connect-RPC (api)" — the shared-admin *family* conventions. **This module demonstrably does neither**, and v1.1 must follow module reality:
+
+- **No RTK.** `web/package.json` has no redux/rtk dependency and `web/src/` has no `@reduxjs` import. Data access is a hand-rolled fetch client (`web/src/lib/api.ts`) + a polling hook (`web/src/lib/usePolling.ts`) + per-page `useState` mutation handling (`web/src/features/plans/ApprovalsQueuePage.tsx:24-28` — `busyId`/`actionError` pattern). Introducing RTK in v1.1 would put a second data paradigm in one module. If the family later mandates RTK, that is a module-wide migration, not a cockpit item.
+- **No Connect-RPC.** `api/go.mod` has no connectrpc dependency. Every surface is Go 1.22+ `net/http.ServeMux` method-patterns (`"GET /api/runs"`, `api/cmd/e2ai-api/main.go:344-347`) with DTO structs locked verbatim to `web/src/lib/types.ts` (`api/internal/report/page.go:1-4`, `api/internal/plans/http.go:1-5`). The wire contract is the TypeScript interfaces; keep that.
+- **Decision:** propose logging a PROJECT.md decision amendment — "e2ai follows the admin family's *integration* conventions (manifest registration, BFF routing, identity headers) but uses net/http + fetch/polling for data, per its locked v1.0 contract." The roadmapper should not write RTK/Connect phases.
 
 ## Recommended Stack
 
-### Core Technologies
+### Web — Cockpit Section (new feature area in `web/src/`)
 
-| Technology | Version | Purpose | Why Recommended |
-|------------|---------|---------|-----------------|
-| Go | current stable (1.25+; verify exact minor at kickoff) | e2ai API + orchestrator + results/reporting services | Matches the shared-admin family convention (Go API, Postgres). Long-running browser/emulator session supervision, check-run and PR-comment plumbing, and durable queue consumption all sit naturally in Go. |
-| Node.js + TypeScript | Node 24 LTS (verified live on this workstation: 24.16.0) | Device-runner services: the AI agent loop, Playwright driving, Maestro invocation | The entire agentic-automation ecosystem is TS-first: Playwright, Stagehand, Claude Agent SDK, mobile MCP-style tooling. Fighting this with a Go-only stack would mean writing a second ecosystem. |
-| PostgreSQL | company standard (16/17) | State store, results, artifacts index, durable queue backing store | Company standard. Also backs the job queue (River), so one database serves state + queue. |
-| Playwright | 1.63.0 (Sep 2026; 1.59 added `page.screencast`, 1.62 added `AbortSignal` cancellation) | Web automation engine: launch/attach, screenshot, network interception, traces, video | Industry standard for automation platforms; auto-wait, trace viewer, `connectOverCDP` for attaching to existing Chrome, self-contained HTML reports. Puppeteer lacks the trace/inspector/report depth. |
-| Maestro CLI | 2.8.0 (2026) | Mobile driving layer: Android emulator + iOS simulator UI automation, including React Native | Maintains its own Xcode/WDA compatibility layer so the always-on platform doesn't chase Xcode drift itself; supports RN, Flutter, and web browsers via one declarative model; Maestro Viewer (2.6) and AI-agent debug integration (2.7) are purpose-built for agentic consumers. |
-| Claude Agent SDK (@anthropic-ai/claude-agent-sdk, TypeScript) | current | The agent runtime: PR-derivation agent ("what tests does this PR need?") and role-specialized QA agents | Production-grade agent loop out of the box (same engine as Claude Code): tools, MCP tools, subagents for context isolation/parallelism, hooks, permission modes. Built for "read repo diff, decide tests, run them, report" workloads. |
-| LiteLLM proxy | current, self-hosted (Docker) | Model gateway: unified OpenAI-compatible API across Anthropic/OpenAI/Gemini, routing, fallbacks, budgets, virtual keys | Vision model choice should be a per-role routing decision (fast/cheap flash-class for navigation, strong vision model for verification), not a code-level vendor lock. LiteLLM is the self-hosted standard; keys/budgets stay in-house. |
-| River (Go, Postgres-backed queue) | current OSS 2026 release (Pro v0.24.0 added workflows v2, Jun 2026) | Durable job queue for run orchestration (analyze → build → execute → report), retried with transactional enqueue | Postgres-backed → no Redis to operate (unlike Asynq); transactional enqueue fits Go service; now has a TypeScript client (Jun 2026) so Node runners can insert follow-up jobs directly into the same queue. |
-| React + Redux Toolkit | company standard (shared-admin) | e2ai UI surface inside shared admin: run dashboards, live status, report browser | It's a shared-admin module; reuse the family's UI stack, do not fork a separate front-end. |
+| Technology | Version (pinned in repo) | Purpose | Why / Evidence |
+|------------|---------|---------|----------------|
+| `@nsxbet/admin-sdk` | ^0.14.0 (`web/package.json`) | Shell registration, `useFetch`, `useI18n`, `env`, telemetry | Already the module's integration point. Exports verified in `web/node_modules/@nsxbet/admin-sdk/dist/index.d.ts`: `AdminShell`, `useFetch`, `useI18n`, `env.adminGatewayUrl`, `track`. Cockpit nav = new entry in `web/admin.module.json` `navigation.sections` + a `commands[]` item with `route: "/e2ai/cockpit"`, mirroring the 7 existing commands (`web/admin.module.json:44-170`). |
+| react-router-dom | ^6.28.0 | Cockpit routes | Add routes to `web/src/app/routes.tsx` (plain `RouteObject[]`, `useRoutes` in `App.tsx`). Links use absolute routeBase (`/e2ai/...`) per `RunsListPage.tsx:52`. |
+| Existing fetch client | `web/src/lib/api.ts` | All cockpit API calls | Extend `getJson`/`postJson` helpers with the new cockpit endpoints. Zero new libraries; the contract stays "api.ts ↔ types.ts ↔ Go DTOs". |
+| `usePolling` | `web/src/lib/usePolling.ts` | Live-ish inbox/job views | Already visibility-aware ("avoid hammering a busy API") — exactly right for report-only cockpit dashboards. 10s list / 5s detail cadence matches `RunsListPage.tsx:2-3`. |
+| Tailwind + existing primitives | 3.4.17 | Layout/chips/badges | `web/src/features/plans/chips.tsx` and `StatusChip` in runs are the established look. `@nsxbet/admin-ui` is imported **only** for `styles.css` (`web/src/index.css:2`) — do not start importing its components mid-milestone without checking they exist in v0.6.0. |
+| i18n locales | `web/src/i18n/locales/{en-US,pt-BR,es,ro}.json` | All cockpit strings | Manifest is 4-locale (`web/admin.module.json:6-26`); every page uses `useI18n`. Cockpit ships all four keys on day one. |
+| Mutation UX | `ApprovalsQueuePage.tsx:24-28,51-57` | Action buttons | Per-action `busyId` + `actionError` + `await postJson(...)` then local refresh. Cockpit actions (trigger, kill, retry, pause) copy this verbatim. Destructive actions (kill, queue pause, GitHub redelivery): two-step confirm button pattern (arm → execute) in-component — no modal dependency. |
 
-### Supporting Libraries
+**Explicitly rejected for web:** RTK/RTK Query (see reality check); SSE/WebSocket live push (polling already covers the need; new infra violates budget discipline); any modal/toast library (two-step buttons + inline error banner are the house pattern).
 
-| Library | Version | Purpose | When to Use |
-|---------|---------|---------|-------------|
-| @browserbasehq/stagehand | v4.0.0 (MIT, ~23.7k stars) | Natural-language browser actions (`act`/`extract`/`observe`) layered on Playwright, model-agnostic | As the default vision-driven web navigation layer for QA agents; keeps Playwright underneath for traces/screenshots. Falls back gracefully when a plain selector suffices. |
-| xcrun simctl (Xcode toolchain) | bundled with macOS/Xcode | iOS simulator lifecycle (boot/shutdown/install/erase) + reliable screenshots | Always for lifecycle and capture — native, version-stable, no WDA dependency. |
-| facebook/idb | current (5.3k stars, maintained) | iOS simulator programmatic primitives (screenshots, device listing, app install) | Use for non-WDA primitives on runner hosts; do NOT rely on its WDA tap path on iOS 17+/Xcode 26 (see What NOT to Use). |
-| adb + uiautomator dump (Android platform-tools) | stock | Android emulator primitives: UI dump, tap/type injection, package/activities control | Base layer for Android driving; pair with a fast capture path for interactive loops. |
-| scrcpy-style raw frame stream (or minicap) | current | Fast emulator screen capture (~real-time) for vision-agent navigation loops | `adb screencap` is slow (~2.1s median at 1440×3120 on an Android 15 emulator) — too slow for tight agent loops; screencap is fine for single verification shots. |
-| Playwright HTML reporter | ships with Playwright | Self-contained per-run HTML artifact with embedded traces/screenshots | Attach as the raw per-run artifact; the platform's own report (Postgres + shared-admin UI + PR comment) is the aggregate view. |
-| River TypeScript client | current (Jun 2026) | Insert result/follow-up jobs from Node runners into the same River/Postgres queue | Node→Go direction only; use it so runners don't need a second queue or callback HTTP hop for follow-ups. |
-| gRPC (google.golang.org/grpc + @grpc/grpc-js) or plain HTTP | n/a | Go worker → Node runner handoff for session commands (Go-to-Node direction, where River TS doesn't apply) | Default to plain HTTP on localhost with a typed JSON contract; add gRPC only if streaming command traffic (e.g., screencast frames) justifies it. |
+### API — Cockpit Surface (new `api/internal/cockpit/` package)
 
-### Development Tools
+| Technology | Version (pinned in repo) | Purpose | Why / Evidence |
+|------------|---------|---------|----------------|
+| `net/http` ServeMux surface | Go 1.26.6 (`api/go.mod`) | All new endpoints | New package mirrors `flakes.QuarantineHTTP` / `trends.TrendsHTTP` shape exactly: `Mount(mux)` with method-pattern routes, `gate(w,r,perm)` helper (`api/internal/plans/http.go:111-123`), `writeErr` JSON error shape. Mounted in `main.go` `newMux` behind a `nil`-guard like siblings (`main.go:336-376`). |
+| `httpx` identity + permission ladder | `api/internal/platform/httpx/auth.go:35-37` | Auth wall + attribution | `admin.e2ai.view` (reads), `admin.e2ai.edit` (triggers/enqueues), **`admin.e2ai.admin` — already defined, never used; v1.1 is its first consumer** (kill, queue pause/resume, redelivery, job cancel). Actor attribution via `httpx.IdentityFromContext(r.Context()).User`, same as approvals (`api/internal/approvals/http.go:271,287`). Every cockpit write records the actor. |
+| River v0.47.0 client methods | `github.com/riverqueue/river v0.47.0` | "Sync jobs" observe + control | Verified in module source `client.go`: `JobList(ctx, *JobListParams)` with `NewJobListParams().First(N).States(...)` + cursor pagination; `JobCancel`, `JobRetry`, `JobDelete`, `JobGet`; `QueueList`, `QueueGet`, `QueuePause`, `QueueResume`. Thin read-only-ish Go handlers over these — **no new dependency**. Scope note: cockpit controls *job instances and queues*; the periodic-job *schedule* stays in code (`WithPeriodicJobs`, `api/cmd/e2ai-api/main.go`). |
+| pgx/v5 queries | 5.11.0 | Inbox reads | `webhook_events` and `webhook_triage` already store everything the inbox needs: verbatim `payload jsonb`, `delivery_id`, `signature_valid`, `occurrences`/`last_seen_at` (`api/internal/app/migrations/0001_init.sql:24-33`, `0007_hardening.sql:34-48`). **No triage HTTP surface exists today** — `ingest.ListTriage` (`api/internal/ingest/triage.go:83-90`) has no mount in `main.go`; the inbox fills this real gap. |
+| Ingest re-drive for retry | `api/internal/ingest/dedupe.go`, `http.go` | Webhook retry (primary path) | The whole ingest path is transactional and idempotent by construction (`dedupe.go:1-4`, replay safety in `suite/execute.go:548-551`). Retry = re-parse the stored `webhook_events.payload` and re-drive the same `Ingest(ctx, seed, queue)` seam with a `retry` provenance — converges instead of duplicating. Prefer this over GitHub-native redelivery (below) as the primary action because it needs no new credentials surface and works even when the hook is gone. |
+| `platform/github` client (extended) | `api/internal/platform/github/client.go` | GitHub-native redelivery (secondary action) | Hand-rolled REST client with rate-limit tracking (`client.go:46-76`) — add `POST /repos/{owner}/{repo}/hooks/{hook_id}/deliveries/{delivery_id}/attempts` the same way (no `go-github` introduction). **Requires `github_hook_id` on `registered_apps`** (new registry field in `registry/*.yaml` + column; `betweb.yaml.example`/`bet-app.yaml` gain the field; secret stays `webhook_secret_ref op://` per SECR-01). |
+| MCP probe | `api/internal/mcp/http.go` | "MCP probe" admin action | `POST /mcp` JSON-RPC already exists and is read-only. Cockpit probe = post a `tools/call` envelope server-side (or via the surface) and render the response. No new dependency. |
+| Agent enqueue / kill | `api/internal/agents/http.go:40-56` | "Agent enqueue" action | Already implemented and permission-gated (`POST /api/runs/{runId}/agent-sessions`, kill endpoint present). The cockpit feature is UI + a queue-data view over `GET /api/agent-sessions` — mostly wiring, not new plumbing. |
+| Budget visibility | `api/internal/trends/http.go:33` (`GET /api/trends/cost/{runId}`), `trends.go:81-101` (`RunCost.cost_millicents`) | Cost panel beside triggers | Triggers are billable (agent sessions cost money). Cockpit trigger dialog shows the target's recent per-run cost so the human sees the price before firing — cheap reuse, honors the budget-discipline invariant. |
 
-| Tool | Purpose | Notes |
-|------|---------|-------|
-| mise | Toolchain pinning (Node 24, Go, Xcode CLIs) for runner images | Version-pin every runner image; emulator/simulator stacks are version-sensitive. |
-| Docker Compose | Local e2ai stack: Postgres + LiteLLM + Go API + Node runners | Mobile simulators/emulators run on real hosts, not in Docker — compose is for services only. |
-| GitHub App | Webhook ingest (`workflow_run` for deploy events), check-runs with neutral status, PR comments | Granular permissions: `checks:write`, `pull_requests:write`, `actions:read`, `contents:read`. Prefer a GitHub App over PATs. |
-| macOS hosts (Mac mini fleet or self-hosted macOS runners) | Required substrate for iOS simulators | Architectural constraint, not a tool: iOS simulators cannot run on Linux. Android emulators can run on Linux runners. Plan runner topology accordingly. |
+### Manual Trigger Design (the one genuinely new pipeline path)
 
-### Agent Driving Feasibility (explicit)
+Today's trigger vocabulary is `webhook | reconcile | sweep` (`api/internal/ingest/dedupe.go:25-27`, enforced by a check constraint widened in `0007_hardening.sql`).
 
-- **Web, vision-driven: proven pattern.** Stagehand and browser-use (60k+ stars) both ship screenshot-driven browser agents in production. Playwright's `page.screencast` (1.59+) gives a live video surface for supervising agent sessions. Feasibility: HIGH.
-- **Android emulator, vision-driven: feasible with a fast capture path.** Driving taps/typing via `adb input` is reliable; the constraint is screenshot latency (see Supporting Libraries) — use a raw frame stream for the navigation loop, `screencap`/`uiautomator dump` for grounding and verification. Feasibility: HIGH with that caveat.
-- **iOS simulator, vision-driven: feasible but version-sensitive.** Lifecycle + capture via `simctl` is rock-solid; input injection routes through XCUITest/WDA, which has open compatibility churn (idb issue #853 open since Oct 2023; WDA failures reported on iOS 26.2/Xcode 26.2). Maestro exists precisely to absorb this churn — pin Maestro + Xcode versions per runner image and re-verify on Xcode upgrades. Feasibility: MEDIUM-HIGH, version-pinned.
-- **React Native apps (bet-app): drive the screen, not the DOM.** Appium's native↔webview context switching is a chronic pain point (recurring Appium issue patterns, e.g. #9469/#19884). Vision-first agents sidestep it; only drop to DevTools/CDP when DOM inspection is genuinely needed.
-- **Model choice is a routing decision, not a stack decision.** Current frontier models (Claude/GPT-5.x-class with computer-use benchmarks, Gemini flash-class for speed) all accept screenshots through the LiteLLM gateway; benchmark per role at kickoff and per quarter after.
+| Concern | Recommendation | Evidence/rationale |
+|---------|---------------|-------------------|
+| New source value | `manual` — migration `0010_cockpit.sql` widens the check constraint | Pattern set by 0007 widening the same vocabulary. |
+| `workflow_run_id` for manual runs | Synthesize from a dedicated Postgres sequence starting at 10^12 (GitHub run IDs currently ~10^9; decades of headroom) | `runs` has `unique (app_id, workflow_run_id)` (`0001_init.sql:52`); a manual trigger has no GitHub run. A reserved ID band avoids touching the uniqueness invariant that dedupe depends on. Alternative rejected: relaxing to a partial unique index — it weakens the webhook dedupe guarantee the whole pipeline leans on. |
+| Execution semantics | Manual triggers for **plans** enqueue a draft through the existing approval queue (reuse the approvals machine, `api/internal/approvals/machine.go`, and the `POST /api/runs/{id}/derive-draft` precedent at `main.go:405`); manual triggers never bypass approval gating | PROJECT.md governance invariant: "New/changed plans require human approval". |
+| Webhook-simulate action | Compose a synthetic `RunSeed` server-side from a chosen registered app + environment and drive the same `Ingest` seam with `TriggerManual` | The seed path is already the single transactional funnel (`dedupe.go`); simulating anywhere else would fork the pipeline. |
 
-## Installation
+### Infrastructure
 
-```bash
-# Go services (API, orchestrator, consumers)
-go get github.com/riverqueue/river
-go get google.golang.org/grpc   # only if streaming handoff is adopted
+| Technology | Purpose | Why / Evidence |
+|------------|---------|----------------|
+| Tilt/K8s (unchanged) | Dev loop | `Tiltfile` already forwards api :8082, postgres :5434, admin-bff :8080, web :3005; BFF routes `/e2ai` prefix → e2ai-api (`config/admin-bff.yaml:30-38`). Cockpit adds **no** infra: same BFF route, same namespace. |
+| admin-bff identity headers | Auth in dev | `web/vite.config.ts` proxy injects `X-User`/`X-Permissions: admin.e2ai.view` — dev testing of edit/admin-gated cockpit actions needs the proxy header list extended with `admin.e2ai.edit,admin.e2ai.admin` (one-line change in `web/vite.config.ts`). |
+| Migrations runner | `app.Bootstrap` (`api/cmd/e2ai-api/main.go`, `api/internal/app/`) | v1.1 ships `0010_cockpit.sql` following `0001`–`0009` naming; no runner change. |
 
-# Node runners (device drivers + agent loop)
-npm install playwright @browserbasehq/stagehand
-npm install @anthropic-ai/claude-agent-sdk
-npm install @riverqueue/river.ts   # TypeScript emit client (Node→Go jobs)
+## New Dependencies
 
-# Model gateway
-docker run litellm/litellm          # self-hosted LiteLLM proxy
+**None.** Explicitly rejected candidates:
 
-# Mobile tooling (runner hosts)
-brew tap mobile-bazel/maestro && brew install maestro
-# iOS: Xcode + xcrun simctl are system-provided; idb optional:
-brew install idb-companion
-# Android: install Android SDK platform-tools (adb, uiautomator)
+| Candidate | Verdict | Reason |
+|-----------|---------|--------|
+| `@reduxjs/toolkit` / RTK Query | Reject for v1.1 | Module has no Redux; two paradigms in one module. Family-convention question → PROJECT.md decision note, separate milestone if ever. |
+| `connectrpc` (Go) + `@connectrpc/connect` (web) | Reject for v1.1 | Zero existing usage; wire contract is locked `types.ts` ↔ Go DTOs. Would rewrite every surface or fork the contract. |
+| `google/go-github` | Reject | `platform/github/client.go` is a deliberate hand-rolled client with rate-limit accounting; one more endpoint is ~30 lines. |
+| SSE / socket.io / TanStack Query | Reject | `usePolling` + `api.ts` cover it; visibility-aware polling was built for exactly this ("report-only surface; avoid hammering a busy API", `usePolling.ts:1-4`). |
+| Modal/dialog library | Reject | Two-step arm-confirm buttons match existing UX; admin-ui v0.6.0 component availability unverified — check before importing anything beyond `styles.css`. |
 
-# Browser engines for Playwright
-npx playwright install chromium
-```
+## Schema / Registry Surface (everything v1.1 must add)
 
-## Alternatives Considered
+1. **`0010_cockpit.sql`**: widen `runs_trigger_source_check` with `'manual'`; add `registered_apps.github_hook_id bigint` (+ optional `hook_created_at`); add a `manual_run_seq` sequence (starting 10^12) for synthetic workflow-run IDs.
+2. **Registry config**: `github_hook_id` field in `registry/*.yaml` (`registry/bet-app.yaml`, `registry/betweb.yaml.example` gain the field); `webhook_secret_ref op://` unchanged per SECR-01.
+3. **Permissions**: no new permission strings — `admin.e2ai.admin` gets its first real consumer (`httpx/auth.go:37`).
 
-| Recommended | Alternative | When to Use Alternative |
-|-------------|-------------|-------------------------|
-| Playwright + Stagehand | browser-use (Python, CDP-direct since Aug 2025) | When a Python-only stack is acceptable and raw-CDP performance matters more than traces/reports — not our case; e2ai needs traces, artifacts, and TS ecosystem coherence. |
-| Maestro | Appium 2.x (+ XCUITest/UIAutomator2 drivers) | When deep native-object queries or existing Appium suites must be reused. Heavier setup, same WDA churn underneath; keep as an escape hatch, not the default. |
-| River (Postgres) | Asynq (Redis) | Only if the platform already operates Redis and no Postgres-transactional enqueue semantics are needed. Adds a second datastore here. |
-| Claude Agent SDK | LangGraph | When orchestrating graph-shaped multi-model pipelines with checkpoint/rewind semantics as the core product. e2ai's loop is "derive → run → verify → report"; the SDK covers it with less runtime weight and no Python dependency. |
-| LiteLLM | Portkey (TS-first, hosted control plane, guardrails/cache) | If guardrail-driven policy or hosted caching is a hard requirement and a vendor control plane is acceptable. Self-host + in-house secrets favor LiteLLM. |
-| Playwright HTML report + platform UI | Allure Report | Only for teams that already live in Allure ecosystem; its Java toolchain and annotation overhead add moving parts the platform UI + Postgres already cover. |
-| Claude Agent SDK (TS) | Raw Anthropic SDK hand-rolled loop | Only for minimal single-tool experiments; you'd rebuild subagents, permission modes, and hooks badly. |
+## Feature → Existing-Reuse Map (summary for the roadmapper)
 
-## What NOT to Use
+| v1.1 Feature | Exists today | New work |
+|--------------|-------------|----------|
+| Cockpit trigger section | Ingest seed funnel, approvals machine, derive-draft endpoint, cost endpoint | `manual` trigger source + synthetic run IDs + trigger UI page |
+| Webhook simulate | Ingest seam (transactional, idempotent) | Seed composer endpoint + UI |
+| Webhook inbox | `webhook_events` + `webhook_triage` tables store full payloads; `ListTriage` query exists unmounted | Read surface (`GET /api/cockpit/webhook-events`, `/api/cockpit/triage`) + retry endpoint + inbox UI |
+| GitHub redelivery | `platform/github` client | Hook-deliveries endpoint method + `github_hook_id` plumbing (secondary action) |
+| Agent enqueue / kill | Fully implemented endpoints (`agents/http.go`) | Cockpit UI only |
+| MCP probe | `POST /mcp` JSON-RPC | Probe action + response viewer |
+| Sync jobs observe/control | River `JobList/JobCancel/JobRetry/QueuePause/QueueResume` in v0.47.0 already in go.mod | Thin cockpit handlers + jobs UI page |
 
-| Avoid | Why | Use Instead |
-|-------|-----|-------------|
-| Selenium / WebDriver legacy stack | No trace/artifact model, slower protocol, no CDP attach; the agentic ecosystem has moved past it | Playwright |
-| idb WDA tap/injection path on iOS 17+ / Xcode 26 | Open compatibility breakage (idb #853; WDA fails on iOS 26.2/Xcode 26.2 per mobile-mcp #303) | Maestro for input; `simctl` for lifecycle/screenshots |
-| adb screencap in the interactive agent loop | ~2.1s median per capture at 1440×3120 — kills loop responsiveness | scrcpy-style raw frame stream; screencap for one-off verification shots |
-| Appium native↔webview context switching as primary RN strategy | Chronic, flaky (appium #9469/#19884-class issues); adds chromedriver coupling | Vision-first screen driving; CDP only when DOM access is required |
-| Cypress | No multi-tab, no CDP attach to running Chrome, weaker network/trace tooling for agents | Playwright |
-| Asynq for the job queue | Requires Redis alongside Postgres — second datastore for no benefit here | River |
-| GitHub PAT for platform identity | Repo-scoped PATs can't manage check-runs cleanly; no fine-grained app permissions | GitHub App with `checks:write` + `pull_requests:write` |
-| Self-hosted ReportPortal/Allure server | Overkill: platform's own Postgres + shared-admin UI + PR comments cover aggregation, trends, and delivery | Playwright HTML artifact + platform UI |
+## Risks / Flags for Other Researchers
 
-## Stack Patterns by Variant
-
-**If a QA agent is stuck on a surface (vision fails, state unclear):**
-- Use a layered ground truth: screenshot → accessibility/DOM snapshot → `uiautomator`/XCUITest element dump
-- Because pure-vision agents plateau on dense UIs; hybrid grounding is the field's pragmatic consensus (Stagehand's `observe` is built for this)
-
-**If model spend spikes:**
-- Use LiteLLM role-routing: flash-class models for navigation steps, flagship vision models for verdicts, with budget keys per app/run
-- Because navigation is high-frequency/low-stakes; verification is low-frequency/high-stakes — routing (not prompting) is where cost is controlled
-
-**If an Xcode/Android SDK upgrade breaks mobile driving:**
-- Use version-pinned runner images + Maestro as the compatibility layer; only re-pin after a canary run passes
-- Because WDA-vs-Xcode churn is the #1 operational risk for always-on iOS automation (verified: idb #853, mobile-mcp #303)
-
-**If a run must outlive a deploy (long emulator session, flaky network):**
-- Use River durable jobs with retries + run-state in Postgres, never in-memory goroutine state
-- Because the platform is always-on and unattended; crash-recovery semantics are a product requirement
-
-**If Node and Go must exchange frequent, low-latency commands (frame streams, live control):**
-- Use plain HTTP/JSON for the command path and River TS for the enqueue path; introduce gRPC only for the streaming path
-- Because Go→Node has no River direction (River TS is Node→Go only), and HTTP-on-localhost is boring and debuggable
-
-## Version Compatibility
-
-| Package A | Compatible With | Notes |
-|-----------|-----------------|-------|
-| Playwright 1.63 | Chromium build shipped by `npx playwright install` | Never decouple: pin Playwright version in runner image and install its matching browsers. |
-| Maestro CLI 2.8 | Xcode/Android SDK versions on the runner | Maestro absorbs WDA churn internally, but re-verify after every Xcode upgrade; pin `maestro --version` per image. |
-| idb / WDA | iOS ≤ 16.5 mostly; iOS 17+ / Xcode 26 has open failures | Lifecycle/capture OK on modern iOS via `simctl`; do not build on idb's WDA tap path. |
-| River Go ↔ River TS client | Same River/Postgres schema generation | TS client (Jun 2026) inserts jobs the Go workers consume; keep versions aligned on upgrades. |
-| Claude Agent SDK | Node 24, MCP tool servers | SDK is TS/Node-native; no Python runtime needed. |
-| LiteLLM proxy | Upstream provider API shapes (vision/image blocks) | LiteLLM normalizes OpenAI-compatible schemas; re-check provider changelogs when adding a new vision model. |
+- **JobCancel semantics:** River cancel of a *running* job is cooperative (job must observe context); runner-queue jobs (agent sessions) may need the existing kill switch instead. Verify per-job-kind behavior in the planning phase (PitfallsResearch: job-control foot-guns).
+- **GitHub redelivery idempotency:** GitHub-side redelivery re-enters the normal webhook path — dedupe makes it safe (`unique (app_id, delivery_id)`), but repeated redeliveries of a *filtered* payload just re-record; document expected outcome in the UI copy.
+- **`admin.e2ai.admin` is new blast radius:** first write actions gated on a never-before-used permission rung; staging verification of the BFF → header → permission chain for that rung is a phase acceptance criterion, not an assumption (BFF scope config lives in `config/admin-bff*.yaml` Okta scopes).
 
 ## Sources
 
-- Playwright GitHub releases (v1.59.0 screencast, v1.62.0 AbortSignal; traceary.com catalog for 1.62/1.63) — MEDIUM, cross-checked
-- browser-use "why we moved from Playwright to CDP" migration post (Aug 2025) + browser-use repo — MEDIUM, cross-checked
-- Stagehand: npmjs.com/package/@browserbasehq/stagehand + browserbase docs (v4.0.0, MIT, Playwright-based) — MEDIUM, cross-checked
-- facebook/idb README + issue #853 (iOS 17 support, open) — MEDIUM, cross-checked with mobile-mcp issue #303 (WDA on iOS 26.2/Xcode 26.2)
-- Maestro docs: docs.maestro.dev (CLI 2.6 Viewer, 2.7 AI agent debug, 2.8 current; web browsers support; known issues) — MEDIUM (official docs)
-- Appium WebView context-switching issue patterns (appium #9469, #19884) — MEDIUM, cross-checked
-- adb screencap latency analysis (handsets blog, May 2026: ~2.12s median @1440×3120) — MEDIUM, single detailed source
-- LiteLLM docs (router architecture, virtual keys, fallbacks; docs.litellm.ai verified 2026-09-09) — MEDIUM (official docs)
-- Portkey vs LiteLLM comparisons (portkey.ai, llmgateway.io, Apr 2026) — LOW-MEDIUM (vendor-adjacent, cross-checked)
-- Claude Agent SDK docs (code.claude.com: subagents, tools, hooks; anthropics/claude-agent-sdk-typescript) — MEDIUM (official docs)
-- LangGraph overview + Claude Agent SDK vs LangGraph comparison (developersdigest.tech, Jun 2026) — LOW-MEDIUM
-- River: riverqueue.com (docs, blog; River for TypeScript Jun 2026; Pro v0.24.0 workflows v2 Jun 2026; pkg.go.dev) — MEDIUM (official docs)
-- GitHub webhooks/check-runs docs (workflow_run event, check-runs create/update with neutral status, issues API comments) — MEDIUM (official docs)
-- Playwright HTML reporter + Allure comparison (allurereport.org/docs/playwright) — MEDIUM
-- macstadium/Tracxn directory pages for version metadata — LOW (directory data only)
+- Repository code (all paths inline above; verified 2026-09-22): `web/package.json`, `web/admin.module.json`, `web/src/{app,lib,shared,features/**}`, `web/vite.config.ts`, `api/go.mod`, `api/cmd/e2ai-api/main.go`, `api/internal/{ingest,plans,approvals,agents,flakes,trends,mcp,report,platform/{httpx,github,river},app/migrations}`, `registry/*.yaml`, `config/admin-bff*.yaml`, `Tiltfile`.
+- River v0.47.0 vendored source: `client.go` (`JobList`, `JobCancel`, `JobRetry`, `QueuePause`, `QueueResume`), `job_list_params.go`.
 
 ---
-*Stack research for: e2ai — agentic, vision-driven autonomous E2E QA arm (@admin/e2ai), NSXBet shared-admin family*
-*Researched: 2026-09-19*
+*Stack research for: e2ai v1.1 Admin Cockpit (@admin/e2ai), NSXBet shared-admin family — zero new dependencies, reuse-first*

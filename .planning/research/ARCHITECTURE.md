@@ -1,214 +1,226 @@
-# Architecture Research
+# Architecture Research: v1.1 Admin Cockpit — Integration Points
 
-**Domain:** Autonomous, vision-driven AI QA control plane (event-driven agent orchestration over web + iOS/Android surfaces)
-**Researched:** 2026-09-19
-**Confidence:** HIGH — grounded in primary sources: in-house repos (`/Users/yuri/Workdir/Nsx/admin`, `incidents-admin`, `aihub-gateway`; `NSXBet/bet-app` via `gh`), the Paperclip OSS repo (paperclipai/paperclip, verified file-by-file), and official docs (GitHub Actions/webhooks, Playwright, Meta idb, Maestro, Temporal, River, Anthropic computer use). Web-only claims are tagged; code-grounded claims are HIGH.
+**Domain:** Control-plane cockpit for an autonomous AI QA arm (triggering, observing, and operating an existing report-only QA pipeline)
+**Researched:** 2026-09-22
+**Mode:** Integration mapping (ecosystem mode, repo-grounded)
+**Confidence:** HIGH — every integration point below is verified against the live repo (file:line citations). The only MEDIUM-confidence items are explicitly tagged (River running-job cancel propagation; replay identity minting).
 
-## Standard Architecture
+## Ground Truth: Family Conventions vs Repo Reality
 
-### System Overview
+PROJECT.md's constraint names the shared-admin family stack ("React + RTK feature slices, hexagonal Go domains, Postgres, Connect-RPC, Tilt/K8s"). The e2ai repo **deliberately deviates on two of these**, verified in dependency files:
 
-The right decomposition is **control plane / execution plane / evidence plane**, a separation Paperclip runs on successfully (verified principle: "The control plane doesn't run agents. It orchestrates them. Agents run wherever they run and phone home." — `docs/start/architecture.md`). e2ai adds a third plane: evidence (screenshots, traces, videos) is high-volume binary data that must never flow through the control plane's hot path.
+| Family convention | e2ai reality (verified) | Verdict for cockpit |
+|---|---|---|
+| Connect-RPC | `api/go.mod` has **no connectrpc module**. HTTP surface is plain `net/http.ServeMux` with JSON REST under `/api/*` (`api/cmd/e2ai-api/main.go` `newMux`, lines 327–421) | Follow repo reality: new cockpit endpoints are plain REST handlers. Do NOT introduce Connect-RPC in v1.1 |
+| RTK feature slices | `web/package.json` has **no redux/@reduxjs**. Deps: `react@18`, `react-router-dom@^6.28`, `@nsxbet/admin-sdk@^0.14`, `@nsxbet/admin-ui@^0.6`, `tailwindcss@3`. State = per-page fetch via `web/src/lib/api.ts` + `web/src/lib/usePolling.ts` | Follow repo reality: cockpit pages are fetch + `usePolling`. Do NOT introduce RTK in v1.1 |
+| Hexagonal Go domains | Matched exactly: each domain package owns its types, queries, workers, and an `*HTTP` surface struct with `Mount(mux)` | Matched: cockpit actions land in owning domains |
+| River jobs, Postgres, Tilt/K8s | Matched (`api/internal/platform/river`, `postgres`, `Tiltfile`) | Matched |
+
+The mismatch was already flagged in v1.0 research ("Connect RPC mention in doc comment is stale") and remains accurate. **This file treats the repo as normative.**
+
+---
+
+## 1. System Context Map
+
+Two processes share one Postgres DB; River queues are process-disjoint (`api/internal/platform/river/river.go:1-4`):
 
 ```
-┌────────────────────────────────────────────────────────────────────────────┐
-│ EVENT INGEST (shared admin BFF)                                            │
-│  GitHub webhooks (workflow_run, HMAC-SHA256 validated) · CI dispatch       │
-│  POST /webhooks/github → validate sig → 202 → enqueue (idempotency key)    │
-└──────────────┬─────────────────────────────────────────────────────────────┘
-               │ deploy/merge events (envelope + raw payload)
-┌──────────────▼────────────────────────────────────────────────────────────┐
-│ CONTROL PLANE (Go API + Postgres, module-scoped)                          │
-│  App registry · deploy state machine · job queue (River-like)             │
-│  Test derivation (diff → scope → test intent) · session orchestrator      │
-│  Budget/credit ledger · approval gates · audit log                        │
-└──────────────┬───────────────────────────────┬────────────────────────────┘
-               │ run spec (queue message)       │ run status (append-only)
-┌──────────────▼───────────────┐   ┌───────────▼──────────────────────────┐
-│ EXECUTION PLANE (workers)    │   │ EVIDENCE PLANE                        │
-│  Agent roster per surface:   │   │  S3/blob: screenshots, videos,        │
-│   · web → Playwright         │──▶│  traces, DOM/a11y snapshots, step     │
-│   · iOS sim → idb (companion)│   │  journals — referenced by key/URL,    │
-│   · Android emu → Maestro    │   │  never inlined                        │
-│  Vision loop: capture →      │   └───────────┬──────────────────────────┘
-│  VLM decide → act → verify   │               │ evidence refs
-│  (LLM via aihub gateway)     │               │
-└──────────────┬───────────────┘   ┌───────────▼──────────────────────────┐
-               │ run record        │ REPORTING (admin module UI)           │
-               └──────────────────▶│  Run timeline · per-test verdicts w/  │
-                                   │  visual evidence · PR comments ·      │
-                                   │  corpus health (flaky, stale, gaps)   │
-                                   └───────────────────────────────────────┘
+GitHub webhook ──▶ admin-bff ──▶ e2ai-api (drains River "default" queue)
+                                   │  ingest · plans · approvals · agents-http
+                                   │  report · derive · flakes · trends · mcp
+                                   ▼
+                              postgres (app schema + river_* schema, shared)
+                                   ▲
+e2ai-runner (drains River "runner" queue: e2ai:run:execute + agent session worker)
+                                   │ docker run (playwright) + agent loops
+                                   ▼
+                             bet-app under test (report-only: never mutated)
 ```
 
-### Component Boundaries
+| Component | Responsibility | Cockpit relevance (v1.1) |
+|---|---|---|
+| `api/internal/ingest/` | Webhook handler, transactional ingest, wait-rollout gate, reconcile sweep | Manual trigger + webhook inbox/replay |
+| `api/internal/suite/` | Execute job (runner), plan-resolution gate, canary | Manual-trigger blueprint |
+| `api/internal/agents/` | Session orchestrator, budget engine, sweeps, AgentsHTTP | Agent enqueue/kill surfaces already exist |
+| `api/internal/plans/` | Plan catalog, sync/corpus-seed jobs, PlansHTTP | Sync-job observation; approved-version resolution |
+| `api/internal/report/` | RunsHTTP (list/detail/report/artifacts), report job, PR comments | Read models cockpit reuses |
+| `api/internal/approvals/` | Approval queue + attributed decisions (Mount) | "Cockpit shows what's approved" reads this |
+| `api/internal/platform/river/` | Queue-disjoint client builders | Job ops (observe/cancel/pause) |
+| `api/internal/platform/httpx/` | BFF identity middleware + permission ladder | Every cockpit endpoint gates through it |
+| `api/internal/mcp/` | Read-only JSON-RPC at `/mcp` | "MCP probe" admin action target |
+| `web/src/features/*` | One folder per surface, page + `lib/api.ts` helper + `usePolling` | Cockpit features mirror this shape |
 
-| Component | Responsibility | Communicates With |
-|-----------|---------------|-------------------|
-| **Webhook receiver** (BFF) | Validate GitHub HMAC signature, normalize `workflow_run` payload, reject replays, 202-ack then enqueue | Event queue, app registry |
-| **App registry** | Per-app config: repo, deploy workflow name, tag scheme, environments, surface list, target URLs, corpus root | Ingest, orchestrator, reporting |
-| **Deploy state machine** | Transition deploy events → `building → deployed → rolled out → verified/failed` (deploy ≠ live: ArgoCD rollout lag) | Ingest, orchestrator |
-| **Test derivation** | Map PR diff → scope → test intent (affected routes/features → corpus subset) → run plan | Registry, orchestrator |
-| **Session orchestrator** | Queue of run specs; assigns one agent per session (Paperclip: single-assignee atomic checkout); budget checks; approval gates; wake/retry machinery | Queue, execution plane, LLM gateway |
-| **Execution workers** | Drive surfaces: Playwright (web), idb (iOS sim), Maestro (Android emu); run the screenshot→decide→act→verify vision loop | Control plane, evidence plane, LLM gateway |
-| **Evidence store** | Object storage + metadata: screenshot per step, video, trace, a11y/DOM snapshot, step journal; append-only | Execution plane, reporting |
-| **Verdict engine** | Classify pass/fail/flaky/infra-error from evidence + run state, not exit codes alone | Orchestrator, reporting |
-| **Reporting** | Admin module pages + PR comments: run timeline, verdicts with visual evidence, corpus health | Control plane, evidence store |
-| **Corpus maintainer** | Post-run: dedupe test intents, flag stale/flaky specs, propose repairs (approval-gated) | Registry, orchestrator |
+## 2. Trigger Path Today (verified end-to-end)
 
-### Data Flow (trigger → report, explicit)
+### 2.1 Sources enum
 
-1. **Trigger.** GitHub delivers `workflow_run` (action `completed`) for a registered deploy workflow — e.g. bet-app's real hook: `workflows: ["Release - Web"]`, filtered by `conclusion == 'success'` and `display_title` containing `Deploy to production` (verbatim from `on_deploy_checkly.yaml`, verified via `gh api`).
-2. **Ingest.** Receiver validates `X-Hub-Signature-256` (HMAC-SHA256, constant-time compare), builds an idempotency key (`repo + workflow + run_id`), stores the envelope, enqueues, and 202s immediately (best practice per GitHub docs; no inline processing).
-3. **Registry resolution.** Job resolves app config from registry (slug, surfaces, env URLs, corpus root). Unknown app → quarantine event for admin triage, not a crash.
-4. **Derivation.** If PR context available, derive scope from diff (routes/components touched → candidate test intents). Else run seeded suite. Dedupe against corpus.
-5. **Dispatch.** Orchestrator creates a run record, checks budget policy (like Paperclip's `budget_policies` → `budget_incidents`), creates per-surface sessions, enqueues execution jobs (River-style Postgres queue, transactional enqueue).
-6. **Execution.** Worker spins the target surface (browser context / simulator boot via idb companion / emulator + Maestro), then loops: capture state (screenshot + a11y tree) → LLM decision via aihub gateway → act (Playwright locator/idb HID tap/Maestro step) → verify. Each loop appends to a step journal and uploads evidence by key.
-7. **Verdict.** From evidence + run state: pass / fail (with reproducing evidence) / flaky (pass on retry, like bet-client's existing `retries: 2`) / infra-error (simulator boot failure ≠ product bug).
-8. **Report.** Admin module renders run timeline + verdicts with inline visual evidence; PR comment summarizes with evidence links. Failures above a threshold go to an approval/attention flow rather than auto-mutating anything.
-9. **Feedback.** Corpus maintainer records outcome per test intent (verified-once / flaky / stale), feeding the next derivation pass.
+`runs.trigger_source` is a **check constraint**, not just a comment:
 
-### Shared-Admin Module Fit (verified against `/Users/yuri/Workdir/Nsx/admin` and `incidents-admin`)
+- `0001_init.sql` — column added with comment `webhook | reconcile` (no constraint).
+- `0007_hardening.sql` (bottom) — the real gate:
 
-- **Registration:** e2ai ships `web/admin.module.json` validated against `packages/admin-sdk/schemas/admin.module.schema.json`; the `adminModule()` Vite plugin emits `dist/module.manifest.json`; the shell's `DynamicModule` fetches the manifest and loads the hashed entry at runtime; the registry records it (`POST /api/modules` / `GET /api/catalog`); assets host on S3 (`assets-admin.webdevelopers.com.br`); publish via the existing `publish-module` GitHub action; scaffold with `adminx init`. No bespoke plumbing — this is the exact path incidents-admin uses.
-- **Ingress:** the BFF is the natural webhook endpoint host. **No webhook precedent exists in the platform** (incident.io sync is deliberately poll-based, `api/internal/integration/incidentio_jobs.go:18-22`) — HMAC validation must be designed fresh; GitHub's own guidance applies (raw-body capture before parse, proxy must not modify payload, constant-time compare).
-- **Processing model:** platform API queues are **domain-blind** with idempotency keys — enqueue a `deploy-event` job and let the e2ai service consume it. API does JWT-free trust of BFF identity headers (`api/internal/platform/httpx/auth.go` reads `X-User`); service-to-service uses Keycloak service tokens.
-- **LLM access:** route all model calls through **aihub-gateway** (Go hexagonal, OpenAI/Anthropic-compatible, model catalog + routes in Postgres, async spend logging). Verify computer-use/vision models are in the catalog — if not, that's a gateway feature request, and budget/spend tracking comes free.
-- **UI:** navigation sections + permission-gated commands per manifest schema; report pages live inside the shell like incidents-admin's pages.
+```sql
+alter table runs add constraint runs_trigger_source_check
+  check (trigger_source in ('webhook', 'reconcile', 'sweep'));
+```
 
-## Patterns to Follow
+Go constants mirror it (`api/internal/ingest/dedupe.go`): `TriggerWebhook`, `TriggerReconcile`, `TriggerSweep`. **A cockpit "manual" trigger requires a migration widening this check + a new constant.**
 
-### Pattern 1: Control plane not execution plane
-**What:** Orchestration state (runs, sessions, verdicts, budgets) lives in Postgres-backed services; agents/workers are ephemeral and stateless, holding only a run context (Paperclip pattern: env `PAPERCLIP_API_URL/API_KEY/COMPANY_ID/TASK_ID/RUN_ID`, every mutation audited via run-id header).
-**When:** Always for e2ai — QA runs die with their machines; state must not.
-**Why:** Resumability after worker death, auditability of every agent action, cost attribution per run.
+### 2.2 The five live entry points
 
-### Pattern 2: Privilege-separated webhook ingest via `workflow_run`
-**What:** Observe deploys with a `workflow_run`-triggered workflow (or webhook), never a PR-hook pipeline. GitHub verifies: `workflow_run` actions are `requested|in_progress|completed`; it fires only when the workflow file is on the default branch; and the triggered run receives secrets/write tokens even when the triggering run didn't — the official privilege-separation pattern. Untrusted PR code is never checked out by the privileged workflow (the "pwn requests" warning). Bet-app already uses this shape for Checkly: `workflow_run: {workflows: ["Release - Web"], types: [completed]}` with a conclusion + display-title filter.
-**When:** The e2ai trigger path.
-**Why:** Runs on deploy completion regardless of who dispatched it (in-house deploys are manual `workflow_dispatch` → reusable `NSXBet/github-workflows/deploy_parallel.yaml@main`, keyed on `bet-client@*` tags — a deploy hook must observe *that* event chain, not PR merges).
-**Caveats to encode:** (a) deploy ≠ live — ArgoCD rollout lag (bet-app sleeps 300s; e2ai should instead poll rollout health); (b) the default-branch requirement for the observing workflow; (c) `workflow_run` chains cap at 3 levels.
+| # | Trigger | Route/Kind | Entry file | Path |
+|---|---|---|---|---|
+| 1 | Deploy webhook | `mux.Handle("/github/webhook", webhook)` + `"/github/webhook/"` (`main.go:338-339`) | `ingest/http.go` `Handler` | HMAC verify (`ingest/secrets.go` op:// resolver + shared fallback) → match `app.App` (registry seeded at boot, `app/service.go` `Bootstrap` → `registered_apps`) → filter (workflow_name + display_title matchers) → `Store.Ingest` |
+| 2 | Reconcile sweep | periodic `e2ai:ingest:reconcile` (default queue) | `ingest/sweep.go` `ReconcileWorker` | Lists recent completed `workflow_dispatch` runs via `platform/github` (`RunsLister`) → same `Store.Ingest` with `TriggerReconcile` |
+| 3 | Edge sweep | periodic `e2ai:edgesweeps:tick` (default) | `agents/edgesweep.go` | Creates run row with `trigger_source='sweep'` + one `edge_hunter` session; findings land as corpus learnings |
+| 4 | Image canary | periodic `e2ai:canary:image` (default) | `suite/canary.go` | **Direct run insert**: `trigger_source='reconcile'`, `run_number=0`, **synthetic negative `workflow_run_id`**, status `provisioning`, then enqueues `ExecuteArgs{Image: candidate}` on the runner queue |
+| 5 | Agent session enqueue | `POST /api/runs/{runId}/agent-sessions` | `agents/http.go` `Enqueue` | Admin-only, see §2.4 |
 
-### Pattern 3: Adapter/executor abstraction with a closed run lifecycle
-**What:** One interface, N surface adapters (web/iOS/Android). Paperclip's verified lifecycle: closed allowlist of phases (`place_workspace → start_transport → create_runtime → ensure_session → prepare_turn → turn → end_session → … → release`) with per-phase timings logged; adapters parse runtime output into structured results (usage, cost, artifacts). e2ai analog: `acquire_surface → prepare_app_state → step_loop → teardown → sync_evidence`.
-**When:** All execution code.
-**Why:** Adding a surface must not touch the orchestrator; phased run logs make every failure diagnosable.
+### 2.3 The shared transactional spine (`ingest/dedupe.go`)
 
-### Pattern 4: Vision loop over accessibility trees, vision as verifier
-**What:** Don't ask the model to click from pixels blind: capture **a11y tree + screenshot**, prefer structured locators (Playwright locators / idb accessibility-info / Maestro's accessibility-tree driving — verified) and use the VLM to decide *what to do next*, judge *did the UI respond correctly*, and repair broken selectors. Anthropic's computer-use reference loop (screenshot → coordinate action → screenshot) is the fallback for genuinely visual-only checks (e.g., ad banners, canvas, WebView chrome).
-**When:** Web: locator-first with screenshot verification. Native WebView screens: same loop (the web content inside CustomWebView is reachable; pure-native chrome needs vision). Visual-only assertions: screenshot diff/VLM judgment.
-**Why:** Cost and determinism. Pure screenshot-click loops are slow, expensive, and flaky; locator-first keeps agent steps auditable.
+All webhook/reconcile runs commit atomically in one tx:
 
-### Pattern 5: Evidence-first verdicts (never trust exit codes alone)
-**What:** Every step appends a journal entry with evidence keys; verdicts cite evidence. Playwright facts (official docs): screenshots can be buffer/element/fullPage; **video is only produced by `recordVideo` and finalized at context close** (so teardown must close contexts before evidence sync); traces are per-test (`trace: on-first-retry` in bet-client's config); browser contexts isolate state. idb provides per-command screenshots and screencast; Maestro provides screenshots/video natively.
-**When:** Verdict engine + reporting.
-**Why:** "Failed" without a picture is unactionable; "pass" without evidence is unauditable. bet-client already emits blob/json reporters — e2ai can consume those formats for the seeded suite and go evidence-native for agent sessions.
+1. `webhook_events` insert — dedupe on `(app_id, delivery_id)` (`insertEvent`).
+2. `runs` insert — dedupe on `(app_id, workflow_run_id)` (`insertRun`, on-conflict-nothing).
+3. Wait-rollout job `InsertTx` — `e2ai:run:wait-rollout`, **default queue**, `MaxAttempts: 1`, `UniqueOpts.ByState` (scheduled/pending/available/running) so webhook-vs-sweep races never double-enqueue.
 
-### Pattern 6: Heartbeat/wake + append-only run log with idempotent retries
-**What:** Long agent sessions need a coordination primitive that survives worker death. Paperclip's verified machinery: `heartbeat_runs` + `heartbeat_run_events` (append-only, per-run `seq` cursor, writer locks the run row, rejects sequence gaps, idempotent retry), `agent_wakeup_requests` for wake-on-approval flows.
-**When:** Session orchestrator.
-**Why:** A 10-minute simulator session that dies at minute 8 must resume or fail cleanly, not corrupt state; approvals (e.g., "publish this failing report") wake the agent with structured context.
+Then `WaitRolloutWorker` (`ingest/rollout.go`): guarded transition `queued → waiting-rollout`, polls the app's `health_url` until 2xx (fallback: fixed 5m), then enqueues `ExecuteArgs` on the **runner** queue (`rollout.go:48`). Never-healthy → verdict INFRA_ERROR + guarded `→ failed` (one-shot gate, returns nil so River does not retry).
 
-### Pattern 7: Governance by default — budgets, approvals, audit
-**What:** Copy Paperclip's verified trio: (1) budget policies with threshold → incident (costs tracked per agent/task/project — for e2ai, per app/run); (2) approval gates as decision-ready payload cards with structured wake (a failing-run report that would post to a customer channel requires sign-off); (3) every mutation audited with a run-id header. Tool-gateway-style policies (`allowed / ask_first / off`) fit the corpus-maintainer's repair actions: suggesting a selector fix = allowed; rewriting app code = blocked.
-**When:** From day one, not retrofitted.
-**Why:** An autonomous system that spends credits and posts publicly without gates is the top organizational risk (see PITFALLS).
+`Executor` (`suite/execute.go`, runner process): `provisioning → executing` (guarded) → neutral check-run `in_progress` → `exec.CommandContext(ctx, "docker", ...)` clone/build/serve/playwright (`execute.go:127`) → parse results → upsert `run_plan_resolutions` via `resolvePlanGate` (`execute.go:370-518`) → hand report job back to the **default** queue (`e2ai:run:report`, `execute.go:76`) → `executing → reporting`. `report/job.go` (api process) finalizes verdicts, check-run, PR comment.
 
-### Pattern 8: Durable execution for long sessions
-**What:** Queue+worker (River-style Postgres, transactional enqueue, per-queue `MaxWorkers`) is sufficient for run-level dispatch; per-step durability inside a session comes from the append-only run log, not a workflow engine. Temporal's model (workflow code re-executed on replay; activities' results recorded in event history) is the gold standard but heavy to adopt; its one killer idea — **record, then replay** — is achievable by making every side-effecting step an idempotent, journaled activity.
-**When:** Session orchestrator design.
-**Why:** Don't buy a second runtime to do what a journal + idempotent steps do.
+**Plan-resolution gate** (`run_plan_resolutions`, `0003_derive.sql`): `mode ∈ approved | legacy_full_suite | draft_only`. `draft_only` fails the run — APPR-01 forbids executing without approved expectations. The gate writes `{plan_id, plan_version_id, content_hash, selected[], mode}` — the record a manual trigger must produce or bypass-with-equivalent.
 
-## Anti-Patterns to Avoid
+### 2.4 The two admin-facing write paths that already exist
 
-### Anti-Pattern 1: LLM-per-click everything
-**What:** Every navigation action routed through an expensive vision model.
-**Why bad:** 49 existing bet-client specs × dozens of steps × vision calls = cost blowout and minutes-long sessions; Paperclip costs budgeting exists precisely because of this.
-**Instead:** Locator-first execution with VLM at decision points and verification; reserve pure-vision loops for visual-only assertions.
+- **Agent enqueue** (`agents/http.go` `Enqueue`, `POST /api/runs/{runId}/agent-sessions`): gates on `httpx.RunEditPermission`; run must be `executing` (else 409); requires `run_plan_resolutions r join plan_versions pv where r.mode='approved' and pv.status='approved'` (else 409); inserts one `navigator` + one `vision_judge` session with `step_ceiling = len(plan.Steps)`; re-enqueue = 409.
+- **Derive-draft re-trigger** (`main.go:405-421`, `POST /api/runs/{id}/derive-draft`): `RunEditPermission` → `riverClient.Insert(derive.DeriveDraftArgs{RunID, PRNumber: 0})` → `202 {"enqueued":true}`. **This is the exact HTTP shape a cockpit trigger endpoint copies.**
 
-### Anti-Pattern 2: Deploy-merge coupling
-**What:** Triggering QA on PR merge or on deploy *workflow start*.
-**Why bad:** In-house deploys are manual dispatches of a reusable workflow keyed on tags (`bet-client@*`); the QA-relevant moment is *rollout completion*, not tag push. Merge-triggered runs test code that may never deploy.
-**Instead:** Observe the `workflow_run` completion of the registered deploy workflow + rollout health polling (bet-app's Checkly hook sleeps 300s — poll instead).
+---
 
-### Anti-Pattern 3: Inline webhook processing
-**What:** Doing derivation/simulation inside the HTTP handler.
-**Why bad:** GitHub times out deliveries at 10s; a slow handler causes redelivery storms; replays without idempotency duplicate runs.
-**Instead:** Validate → persist envelope with idempotency key → enqueue → 202. Process async.
+## 3. Manual Trigger — Exact Integration Recipe
 
-### Anti-Pattern 4: Absolute paths / host coupling in artifacts
-**What:** Evidence records pointing at worker-local paths (`/tmp/runner-3/shot.png`).
-**Why bad:** Paperclip explicitly forbids it — work products are `workspace_file` refs relative to the workspace only (verified `doc/AGENT-ARTIFACTS.md`); host paths break evidence replay on any other machine.
-**Instead:** Evidence keyed by run/session/step in object storage; metadata in Postgres; URLs resolved at render time.
+Closest existing analog: `suite/canary.go` (creates a run outside the webhook path) × the derive-draft endpoint (admin-gated POST that enqueues a job).
 
-### Anti-Pattern 5: Silent self-healing of the product
-**What:** Agent patches app code when a test fails, or "fixes" by retrying until green.
-**Why bad:** Paperclip's verified anti-requirement: "Not automatically self-healing — surfaces problems, doesn't silently fix them." A QA arm that mutates product code destroys trust in both directions.
-**Instead:** Surface via attention/report; corpus repair (selector updates) is approval-gated and only touches e2ai's own corpus.
+Required integration points, in dependency order:
 
-### Anti-Pattern 6: One global test corpus with no app scoping
-**What:** Single shared suite across apps/environments.
-**Why bad:** bet-app is not one surface: `bet-client` (Next.js, 49 specs, 3 browser projects incl. Pixel 5/iPhone 12 viewports), `native` (expo-router + CustomWebView + Maestro flows at `apps/native/e2e/`), `sso`. Registry-less selection guarantees wrong-surface runs and meaningless verdicts.
-**Instead:** App registry rows declare surfaces, corpus roots, env URLs; derivation is registry-driven.
+1. **Migration** (`api/internal/app/migrations/0010_*.sql`): widen `runs_trigger_source_check` to include `'manual'` (0007 shows the exact constraint text). No other table change — `runs` already carries `head_sha`, `head_branch`, `environment`.
+2. **Constant** (`ingest/dedupe.go`): `TriggerManual = "manual"` alongside `TriggerWebhook | TriggerReconcile | TriggerSweep`.
+3. **Endpoint** (new handler in `ingest`, mounted in `newMux` — `ingest` already owns run creation via `ingest.Store`; do not invent a new package for one endpoint):
+   - `POST /api/cockpit/triggers` body `{app_id, head_sha, head_branch?, environment}`; permission `httpx.RunEditPermission` (mirror `agents/http.go` gating style).
+   - Resolve the app row from `registered_apps` (seeded from `registry/*.yaml` at boot — `app.Bootstrap`). Reject unknown app 404.
+   - Resolve `head_sha`: accept an explicit SHA, or a branch resolved via the `platform/github` client (already wired for plans/reconcile). Empty SHA → 400.
+   - One tx (mirror `ingest/dedupe.go` `Store.Ingest`): insert run row `trigger_source='manual'`, `status='provisioning'`, `run_number` next per app, `workflow_run_id` = **synthetic negative value reusing the canary scheme** (`suite/canary.go` `ensureRun` — keeps `(app_id, workflow_run_id)` dedupe collision-free), then `riverClient.Insert(ExecuteArgs{RunID}, canaryExecuteOpts-style opts)` — runner queue, `MaxAttempts: 1`, `UniqueOpts.ByState` dedupe.
+4. **Approval envelope**: do NOT bypass APPR-01. If the app has no approved plan version anywhere → 409 (the same condition `resolvePlanGate` treats as `draft_only`-fail). Minimal v1.1: the manual run resolves plans through the executor's existing `resolvePlanGate` unchanged; pinning one specific `plan_version_id` requires extending `ExecuteArgs` — flag for the planner.
+5. **Pitfall**: cockpit "retry" must NOT re-run an old execute job. Terminal run states have no outgoing edges (`runs/state.go` `validTransitions`); the execute job is `MaxAttempts:1` → discarded; `JobRetry` on it re-enters the executor, whose guarded `executing` transition from `failed` is a typed rejection → job errors again. Cockpit retry = **fresh manual run** (same head SHA, same plan), never a job-level retry.
 
-### Anti-Pattern 7: Trusting agent verdicts without replayable evidence
-**What:** Storing only "FAIL: could not find checkout button".
-**Why bad:** Unauditable; LLMs mis-see screenshots; teams will demand repros.
-**Instead:** Journal + screenshots + video + trace; verdict references evidence; seeded-suite runs additionally emit Playwright blob/json (bet-client's existing reporters) for parity with current E2E.
+---
 
-## Scalability Considerations
+## 4. River Job Observation (verified against riverqueue/river v0.47.0, module cache)
 
-| Concern | 1–2 apps, weekly deploys | 5–10 apps, daily deploys | 20+ apps, per-PR |
-|---------|--------------------------|--------------------------|------------------|
-| Ingest | Single BFF webhook endpoint + one queue | Partitioned queues per app; dedupe window (deploy storms) | Fan-out registry; per-repo webhook apps (org-wide GitHub App w/ Actions permission beats per-repo secrets) |
-| Execution | One worker; simulators on a single Mac (idb companion model) | Worker pool per surface; mobile runners are the scarce resource — serialize simulator use | Remote device farm / ephemeral emulators; web runners autoscale |
-| Evidence | Single S3 bucket, manual TTL | Lifecycle rules (30d hot, archive older); video only on failure/retry | Tiered storage; trace/video sampling |
-| LLM calls | Direct via aihub gateway | Rate-limit per app; budget incidents at thresholds | Token budgets per run type; derive-first (locator) policies enforced by orchestrator |
-| Reporting | One run timeline page | Per-app dashboards; corpus health page | Roll-ups, trend analysis, flakiness SLOs |
+Open-source River (what the repo pins: `river v0.47.0` in `api/go.mod`) exposes the full inspection/control surface — no Pro dependency needed:
 
-## Recommended Build Order (each phase delivers value alone)
+| API | Semantics |
+|-----|-----------|
+| `JobList(ctx, *JobListParams)` / `JobListTx` | Filter by `States`, `Queues`, `Kinds`, `IDs`, `Metadata`, `TagsAll/TagsAny`; `OrderBy`, `First`, `After` cursor pagination (`job_list_params.go`) |
+| `JobGet(ctx, id)` | Single job row |
+| `JobRetry(ctx, id)` | Returns a `discarded`/`cancelled` job to `available` — errors otherwise |
+| `JobCancel(ctx, id)` | Pending states cancel immediately; **running** jobs are marked + a control event is NOTIFYed to the owning client (`client.go` `JobCancel` → `notifyProducerWithoutListenerQueueControlEvent`) |
+| `JobUpdate(ctx, id, JobUpdateParams{State, Error, Metadata, Output})` | Manual state nudges |
+| `QueuePause` / `QueueResume` / `QueueList` | DB-level pause on `river_queue`; affects every subscribing process |
 
-1. **Phase 1 — Web happy path (deterministic first).** Registry row for bet-client web + `workflow_run`-based deploy observation (mirror `on_deploy_checkly.yaml`) → run the *existing* 49 Playwright specs on staging → evidence-native run records (consume blob/json + trace) → verdict engine (pass/fail/flaky/infra) → report page in admin shell via the standard module manifest. **Value:** deploy verification that exists today, no agents.
-2. **Phase 2 — Diff-driven derivation.** PR diff → affected-scope mapping → run plan (subset + prioritization); dedupe against corpus; `e2e:smart` already exists in bet-client — build on that concept rather than replacing it. **Value:** right-sized runs, cost control from day one.
-3. **Phase 3 — Agent vision loop on web.** Orchestrator + step journal + evidence store + LLM-via-gateway; agent navigates/verifies locator-first with screenshot verification; agent-authored checks for gaps derivation finds. **Value:** coverage where specs are missing; the agentic core proves itself on the cheapest surface.
-4. **Phase 4 — Mobile surfaces.** iOS simulator via idb (companion+client; accessibility-info for locators, screenshots/screencast) and Android emulator via Maestro (YAML flows, native screenshots/video; native app already uses Maestro at `apps/native/e2e/`). WebView-first strategy: drive web content inside CustomWebView with the same web loop; vision fallback for native chrome. **Value:** full-surface QA; the EAS/Maestro wiring already exists in bet-app.
-5. **Phase 5 — Corpus maintenance + governance hardening.** Flaky/stale detection, selector repair proposals (approval-gated), budget incidents, multi-app onboarding (`adminx init`-style scaffold for new registry rows). **Value:** the system stays trustworthy as autonomy grows.
+Job-kind inventory (all verified strings):
 
-**Ordering rationale:** registry+ingest before agents (everything keys off it); deterministic suite before agentic navigation (baseline verdicts + evidence pipeline proven); web before mobile (fastest feedback, cheapest loops); derivation before scale (cost); governance gates ride along from Phase 1 (report publishing) rather than arriving late.
+| Kind | Package | Queue | Worked by |
+|------|---------|-------|-----------|
+| `e2ai:plans:sync` | `plans/sync.go:46` | default | api |
+| `e2ai:corpus:seed` | `plans/sync.go:47` | default | api |
+| `e2ai:ingest:reconcile` | `ingest/sweep.go:23` | default | api |
+| `e2ai:run:wait-rollout` | `ingest/http.go:30` | default | api |
+| `e2ai:derive:draft` | `derive/job.go:36` | default | api |
+| `e2ai:run:execute` | `suite/execute.go:45` | **runner** | runner |
+| `e2ai:run:report` | `suite/execute.go:50`, `report/job.go:38` | default | api |
+| `e2ai:canary:image` | `suite/canary.go:50` | default | api |
+| `e2ai:agent:sweep` | `agents/sweep.go:34` | default | api |
+| `e2ai:edgesweeps:tick` | `agents/edgesweep.go:43` | default | api |
+| flakes tick | `agents` (periodic, `main.go:148`) | default | api |
 
-## Confidence Assessment
+Periodic jobs are configured with `river.NewPeriodicJob` in `main.go:158+` (reconcile sweep, orphan sweep, edgesweeps tick, flakes tick, canary). Cockpit recommendation: read via `riverClient.JobList` (Kinds filter `e2ai:*`, `First`/`After` pagination) on the api's existing client — zero new dependencies. Direct SQL on `river_job` is acceptable for counts only (tests already do it); prefer the API for state correctness.
 
-| Area | Confidence | Basis |
-|------|------------|-------|
-| Admin platform fit (manifest, BFF, queue, auth) | HIGH | Verified in `/Users/yuri/Workdir/Nsx/admin` + `incidents-admin` source |
-| Deploy ingest pattern (`workflow_run`) | HIGH | GitHub official docs (MEDIUM per seam) **cross-checked** against in-house `on_deploy_checkly.yaml` (verbatim, verified) → verified pair |
-| Bet-app deploy/test reality | HIGH | `gh api` reads of `NSXBet/bet-app` (workflows, playwright.config.ts verbatim, tree) |
-| Paperclip architecture patterns | HIGH | File-by-file verification of paperclipai/paperclip (docs, schema, services, routes) by repo scout |
-| Vision loop (computer use) | MEDIUM | Anthropic official docs + Meta/Microsoft corroborating docs; no code-grounded instance yet |
-| Durable execution choice (queue+journal over Temporal) | MEDIUM | Temporal + River official docs; judgment call, flagged for plan review |
-| aihub gateway as LLM path (vision models availability) | MEDIUM | Gateway repo verified (routing/catalog/spend), but vision/CUA model catalog unverified — open question |
+---
 
-## Open Questions
+## 5. Control Safety Analysis (queue-disjoint clients)
 
-1. **Vision/computer-use models in aihub gateway catalog** — if absent, request gateway support (Anthropic computer-use / equivalent) before Phase 3.
-2. **ACP transport stability** — Paperclip pins ACP packages via overrides (`codex-acp@1.6.2`, `claude-agent-acp@0.73.0`), indicating churn; e2ai likely speaks plain tool-JSON to its own agents instead, but if we reuse agent runtimes, transport stability needs a targeted check.
-3. **Scheduler policy internals** (Paperclip heartbeat cadence/backoff) were not deep-read; if e2ai adopts wake-on-approval semantics, do a targeted follow-up.
-4. **Simulator fleet**: whether Mac runners exist for CI-side iOS simulator execution at NSX (idb companion needs a macOS host) — infrastructure question for the plan phase.
+**Queue topology** (`platform/river/river.go`): the api container drains only `default`; the runner container drains only `runner` (`RunnerClient` builder). Inserting a runner-queue job from the api is already the norm (rollout handoff `ingest/rollout.go:48`, canary `canaryExecuteOpts`), and job control ops (cancel/retry/pause) are DB-level and process-agnostic.
 
-## Sources
+**Cancel a running execute (runner queue):** `JobCancel` from the api → row marked cancelled + control NOTIFY → the runner's client cancels that job's work ctx → `exec.CommandContext` docker run is killed (`suite/execute.go:127`) → the executor's `noteFail` guarded transition `executing → failed` lands with `error_note`. Chain verified piecewise; the runner client's listener config should be confirmed in-phase (confidence MEDIUM end-to-end, HIGH per-link).
 
-**Verified (HIGH) — local/source-read:**
-- `/Users/yuri/Workdir/Nsx/admin` — module manifest schema, `adminModule()` Vite plugin, registry API, S3 hosting, `adminx` CLI, publish-module action (AdminPlatformScout, file-verified)
-- `/Users/yuri/Workdir/Nsx/incidents-admin` — BFF auth (`httpx/auth.go`), domain-blind queue + idempotency, poll-based incident.io sync (no webhook precedent)
-- `/Users/yuri/Workdir/Nsx/aihub-gateway` — Go hexagonal data plane, OpenAI/Anthropic-compatible endpoints, model catalog routes, async spend logging
-- `NSXBet/bet-app` via `gh api` — `on_deploy_checkly.yaml` + deploy-family workflows (verbatim), `playwright.config.ts` (verbatim, 3 projects incl. mobile viewports), 49 specs, `apps/native/e2e` Maestro configs, `e2e:smart`, build-args per env, k8s manifests (BetAppScout + direct fetches)
-- paperclipai/paperclip (MIT, 81k★) — control-plane principle, adapter registry + run lifecycle (`doc/run-log-events.md`), heartbeat/wake schema, approvals/budgets/costs (`doc/SPEC.md` §6), `X-Paperclip-Run-Id` audit header, workspace-relative artifact refs (`doc/AGENT-ARTIFACTS.md`), Smoke Lab browser runner (gated, puppeteer+chromium), anti-requirements §12 (PaperclipScout, file-verified)
-- facebook/idb — companion+client architecture, HID/accessibility/screenshot/video commands, MIT (GitHub repo read)
+**Cancel is not enough for the run row:** a cancelled execute job leaves the run in `queued`/`waiting-rollout`/`provisioning`. A cockpit cancel action must cancel the job **and** move the run to terminal via a guarded `Transition` (`runs/state.go` — the guard rejects concurrent drift). `Transition` has no `error_note` param; the cockpit needs a small runs-package helper that stamps `error_note` then transitions (like `suite`'s `noteFail`).
 
-**Official docs (MEDIUM, cross-checked where noted):**
-- GitHub: Webhook events and payloads (`workflow_run`), Events that trigger workflows (default-branch requirement, pwn requests, 3-level chain cap), Validating webhook deliveries (HMAC-SHA256), Best practices for webhooks
-- Playwright: screenshots, videos (context-close finalization), trace
-- Maestro: how-it-works (accessibility-tree driving), flows, `?ask=` doc API
-- Anthropic: Computer use tool (screenshot→action loop, toolsets); corroborated by Meta/Microsoft computer-use docs (web search, MEDIUM)
-- Temporal: workflows/durable execution (replay + activity event history); River: Postgres queues, transactional enqueue, per-queue workers
-- mabl blog: AI agent frameworks for E2E testing (landscape corroboration)
+**Retry asymmetry:** job-level retry is legitimate only for default-queue kinds — `e2ai:run:report` (a failed report leaves the run stuck in `reporting`; retrying the job is the correct ops lever) and `e2ai:plans:sync`/`e2ai:derive:draft`. It is **never** the retry path for `e2ai:run:execute` (see §3.5 — fresh run instead).
+
+**Queue pause blast radius:** `QueuePause('runner')` halts every app's execute; `QueuePause('default')` halts wait-rollout (runs pile up in `waiting-rollout` forever) and periodic ticks accumulate. Pause persists in `river_queue` across restarts until resumed. Gate both behind `httpx.RunAdminPermission`, surface current pause state in the UI, and label persistence explicitly.
+
+**Invariants preserved:** all cockpit controls operate on the QA arm's own control plane — they never mutate the app under test (report-only posture holds). Session-level control already exists and is not duplicated: kill switch `POST /api/agent-sessions/{id}/kill` (admin) and the budget engine's terminal `budget_exhausted` (`agents/budget.go`).
+
+---
+
+## 6. Web Integration (verified — and a deliberate deviation from family convention)
+
+**Ground truth:** the repo uses **plain net/http REST + fetch**, not Connect-RPC, and **no RTK**. `api/go.mod` has no connectrpc module; `web/package.json` deps are `react 18.3`, `react-router-dom 6.28`, `@nsxbet/admin-sdk 0.14`, `@nsxbet/admin-ui 0.6`, `tailwindcss 3.4` — no redux. The family conventions named in the milestone brief (Connect-RPC, RTK slices) do NOT match this repo; cockpit endpoints/pages must follow the repo's actual patterns (a second convention beside the existing one is prohibited).
+
+### Manifest & navigation
+- `web/admin.module.json`: `id @admin/e2ai`, `navigationOrder 50`, `navigation.style "stacked"` with one section `operations`; `commands[]` entries (runs, plans, approvals, corpus, quality, trends, corpus-health) each carry i18n titles (en-US, pt-BR, es, ro) + icon + section. Cockpit adds a command entry (and, if grouping is wanted, a second section) here — plus the matching `permissions` block entry.
+- `web/src/app/routes.tsx`: react-router children under the module base `/e2ai` — add a `cockpit` route next to `approvals`, element `CockpitPage` in `web/src/features/cockpit/`.
+
+### Gateway & identity
+- `web/src/shared/gateway.ts` `e2aiApiBase()`: `VITE_E2AI_API` → `env.adminGatewayUrl` → dev fallback `http://localhost:8080` → `''`. All module calls go `${base}/e2ai/api/*`; the BFF strips the `/e2ai` prefix and forwards to e2ai-api (`config/admin-bff.yaml`: backend `e2ai-api`, `host.docker.internal:8082`, router prefix `/e2ai`).
+- `web/src/shared/authenticatedFetch.ts` + `AuthenticatedFetchProvider` carry BFF identity; the api reconstructs it in `platform/httpx/auth.go` from `X-User` / `X-Permissions` (base64 JSON). Server-side gating for new endpoints: `admin.e2ai.edit` (`RunEditPermission`) for triggers, `admin.e2ai.admin` (`RunAdminPermission`) for cancel/pause — exact strings in `httpx/auth.go:35-37`.
+
+### Data layer & actions
+- `web/src/lib/api.ts`: typed helpers over `getJson`/`postJson` (via `authenticatedFetch`). Add `triggerRun`, `listRiverJobs`, `cancelRiverJob`, `retryRiverJob`, `setQueuePaused` — same naming/export shape as `listRuns`.
+- Polling, not RTK Query: `usePolling` (visibility-aware, debounced tick) drives lists; `RunsListPage` auto-refreshes the first page every 10s while visible — cockpit lists copy this.
+- POST-action precedent to mirror: the approvals queue decisions (`ApprovalsQueuePage` → `lib/api.ts` → `ApprovalsHTTP` decide endpoints) — trigger buttons get the same confirm-then-post treatment.
+- No Redux provider exists (`web/src/AppProviders.tsx`) — do not introduce one.
+
+## 7. Anti-Patterns for the Cockpit (repo-specific)
+
+| Anti-pattern | Why bad | Instead |
+|---|---|---|
+| Adding Connect-RPC or RTK for cockpit | Second convention beside the repo's REST+fetch; rejected in v1.0 research | Extend `lib/api.ts` + REST handlers |
+| Flipping a terminal run back to `executing` | `runs/state.go` guard rejects it; evidence trail lies | Fresh manual run (§3.5) |
+| JobRetry on an execute job | Re-enters executor against a terminal run → typed rejection → job re-errors | Retry only default-queue kinds; re-trigger runs for execute |
+| Cancelling the job but not the run row | Run row stranded in a non-terminal status forever | Cancel + guarded transition in one endpoint |
+| Bypassing `Transition` for any status change | Loses concurrency safety + terminal stamps | Always through the runs package guard |
+| Browser calling runner endpoints | Runner endpoints are service-token gated (`E2AI_RUNNER_SERVICE_TOKEN`) | All cockpit calls are BFF-identity only |
+| Cockpit mutating the app under test | Report-only invariant | Cockpit controls the QA arm only |
+
+## 8. Operational Notes
+
+- Conditional mounting: surfaces are `nil` when the pool is down and skipped in `newMux` (`main.go:344+` pattern); `/healthz` flips to degraded. Cockpit endpoints follow the same posture.
+- River stop is bounded (`main.go`, 10s drain); the api client enqueues the whole job chain even though runner-queue jobs are worked by another process (`river.go:56`).
+- Local wiring: api on `:8082`, web dev on `:3005`, admin-bff proxies `/e2ai` (`config/admin-bff.yaml`, `Tiltfile`).
+
+## 9. Phase-Specific Warnings
+
+| Cockpit topic | Likely pitfall | Mitigation |
+|---|---|---|
+| Manual trigger | `(app_id, workflow_run_id)` dedupe collision on synthetic IDs | Reuse canary's negative-ID scheme exactly |
+| Manual trigger | Triggering while a webhook run for the same SHA is active | Return the existing active run (read `runs` by app+head_sha) instead of duplicating |
+| Job ops | Cancel semantics differ per job state | Show River job state in UI; cancel only when job not terminal |
+| Queue pause | Pausing `default` silently stalls the whole pipeline | `RunAdminPermission` + persistent-pause banner |
+| Webhook replay/triage | `webhook_triage` is append-only upsert (`ingest/triage.go`); promotion touches registry seeding | Triage surface is read-only today; promotion design (registry YAML is config-as-code, seeded at boot via `app.Bootstrap`) is an open phase decision |
+| MCP probe | `mcp.Surface` (`POST /mcp`) is JSON-RPC, not REST | Wrap, don't reimplement — cockpit calls through existing surface |
+
+## 10. Sources
+
+- `api/cmd/e2ai-api/main.go` — boot, workers, periodic jobs, `newMux` route table (lines 338-421)
+- `api/internal/ingest/{http,dedupe,rollout,triage,sweep}.go` — webhook + reconcile spine, trigger constants
+- `api/internal/runs/{state,queries}.go` — guarded status machine, run shape
+- `api/internal/suite/{execute,canary}.go` — executor, canary (manual-trigger analog), queue opts
+- `api/internal/agents/{http,sessions,budget,sweep,edgesweep}.go` — sessions, enqueue gate, kill switch
+- `api/internal/plans/{sync,http}.go`, `api/internal/approvals/` — plan sync + approval machine
+- `api/internal/app/migrations/0001,0003,0007` — schema, resolutions, trigger-source check constraint
+- `api/internal/platform/{river/river.go,httpx/auth.go}` — queue topology, identity/permissions
+- `web/admin.module.json`, `web/src/app/routes.tsx`, `web/src/lib/api.ts`, `web/src/shared/{gateway,authenticatedFetch}.ts`, `web/package.json`
+- River v0.47.0 source (module cache): `client.go` (`JobCancel/JobRetry/JobList*`), `job_list_params.go`
+- All claims repo-grounded (HIGH) unless tagged; River API semantics from upstream source (HIGH); end-to-end cancel propagation MEDIUM (listener config unverified).
