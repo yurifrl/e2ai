@@ -31,7 +31,7 @@
     {
       "number": "6",
       "name": "Cockpit trigger, Command Center, and webhook simulate",
-      "status": "pending"
+      "status": "in_progress"
     },
     {
       "number": "7",
@@ -54,5 +54,5 @@
     "label": "Advance to the next step (plan phase 6)",
     "reason": "Phase 6 of 4 — needs a plan"
   },
-  "updated_at": "2026-09-23T07:39:51.812Z"
+  "updated_at": "2026-09-23T16:20:25.989Z"
 }
