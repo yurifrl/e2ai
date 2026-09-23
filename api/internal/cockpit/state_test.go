@@ -39,7 +39,12 @@ func testPool(t *testing.T) *pgxpool.Pool {
 		t.Fatalf("migrate schema: %v", err)
 	}
 	// Tests assume a clean slate: repeated runs against one scratch database
-	// must not see state or audit fixtures from earlier runs.
+	// must not see state or audit fixtures from earlier runs. Budget tests
+	// also seed registered_apps/runs/agent_sessions — cascading the app wipe
+	// clears every dependent row in one statement.
+	if _, err := pool.Exec(ctx, `truncate registered_apps cascade`); err != nil {
+		t.Fatalf("clear registered_apps: %v", err)
+	}
 	for _, table := range []string{"cockpit_state", "audit_events"} {
 		if _, err := pool.Exec(ctx, `delete from `+table); err != nil {
 			t.Fatalf("clear %s: %v", table, err)
