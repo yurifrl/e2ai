@@ -73,6 +73,11 @@ func run() error {
 	var webhook http.Handler
 	var riverClient *river.Client
 	var ghClient *github.Client
+	// Cockpit simulate dependencies surfaced from the pool block below:
+	// the transactional ingest seam and the boot-resolved per-app secret
+	// map (ACTN-01/SECR-01 — secrets render once, at boot).
+	var cockpitIngest ingest.IngestStore
+	var cockpitSecrets cockpit.SecretResolver
 	if pool != nil {
 		if err := app.Bootstrap(ctx, pool.Pool, logger, cfg.RegistryDir); err != nil {
 			return err
@@ -195,7 +200,7 @@ func run() error {
 		}
 		queueRef.Set(riverClient)
 		canaryWorker.Queue = riverClient // late-bound like QueueRef; set before Start
-		webhook = ingest.NewHandler(cfg.WebhookSecret, apps, store, riverClient, logger).
+		ingestHandler := ingest.NewHandler(cfg.WebhookSecret, apps, store, riverClient, logger).
 			// APPS-03: per-app webhook secrets — resolve every registry
 			// app's op:// ref at boot (SECR-01: the vault CLI renders
 			// secrets, never Go); apps whose ref fails to render fall
@@ -204,6 +209,7 @@ func run() error {
 			// EDGE-01: signature-valid deliveries from unknown apps are
 			// recorded for admin triage instead of silently dropped.
 			WithTriage(ingest.NewTriage(pool.Pool))
+		webhook, cockpitIngest, cockpitSecrets = ingestHandler, store, ingestHandler.SecretFor
 
 		if err := riverClient.Start(ctx); err != nil {
 			return err
@@ -294,7 +300,7 @@ func run() error {
 	var cockpitSurface *cockpit.Service
 	if pool != nil {
 		cockpitSurface = cockpit.NewService(pool.Pool, cfg.DevFallbackUser, logger, riverClient,
-			cockpit.GitHubHeads{Client: ghClient})
+			cockpit.GitHubHeads{Client: ghClient}, cockpitIngest, cockpitSecrets)
 	}
 
 	handler := httpx.IdentityWithConfig(

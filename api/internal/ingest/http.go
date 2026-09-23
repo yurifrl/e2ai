@@ -81,6 +81,20 @@ func appSecretKey(a app.App) string {
 	return a.Owner + "/" + a.Repo + "/" + a.WorkflowName + "/" + a.Environment
 }
 
+// SecretFor exposes the rendered webhook secret for ONE app from the same
+// in-memory map WithSecretResolver built at boot — per-app secret first,
+// the shared fallback second, exactly the candidate order
+// verifyAppSignature applies on the delivery path. The cockpit simulate
+// boundary consumes this instead of re-rendering vault refs (SECR-01:
+// secrets render once, at boot). Empty string when neither source has a
+// secret; the caller refuses fail-closed.
+func (h *Handler) SecretFor(_ context.Context, a app.App) (string, error) {
+	if secret, ok := h.appSecrets[appSecretKey(a)]; ok && secret != "" {
+		return secret, nil
+	}
+	return h.secret, nil
+}
+
 // IngestStore is the transactional ingest path (dedupe.go). The indirection
 // keeps handler plumbing testable without a database.
 type IngestStore interface {

@@ -25,6 +25,7 @@ const (
 	TriggerWebhook   = "webhook"
 	TriggerReconcile = "reconcile"
 	TriggerSweep     = "sweep" // edge-sweep triggered runs (EDGE-01, 0007)
+	TriggerSimulate  = "simulate" // cockpit webhook simulation (06-03, 0010)
 )
 
 // Result is the outcome of one ingest attempt.
