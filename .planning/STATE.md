@@ -5,7 +5,7 @@ milestone_name: Admin Cockpit
 current_phase: 6
 current_phase_name: Cockpit trigger, Command Center, and webhook simulate
 status: planning
-stopped_at: Completed 06-01-PLAN.md
+stopped_at: Completed 06-02-PLAN.md
 last_updated: "2026-09-23T09:15:32.017Z"
 last_activity: 2026-09-22
 last_activity_desc: v1.1 roadmap written (4 phases; v1.0 records preserved)
@@ -14,8 +14,8 @@ progress:
   total_phases: 4
   completed_phases: 0
   total_plans: 5
-  completed_plans: 1
-  percent: 0
+  completed_plans: 2
+  percent: 20
 ---
 
 # Project State
@@ -24,14 +24,14 @@ progress:
 
 Milestone: v1.1 Admin Cockpit (phases 6–9)
 Phase: 6 (Cockpit trigger, Command Center, and webhook simulate) — READY TO EXECUTE
-Plan: —
-Status: Roadmap ready — 27/27 v1.1 requirements mapped to phases 6–9
-Progress: [░░░░░░░░░░] 0%
+Plan: 2 of 5
+Status: Executing — 06-02 complete (manual trigger backend)
+Progress: [█░░░░░░░░░] 10%
 Last activity: 2026-09-22 — v1.1 roadmap written (4 phases; v1.0 records preserved)
 
 ## Next Action
 
-`/gsd:discuss-phase 6` — Cockpit trigger, Command Center, and webhook simulate (mints the shared substrate: migration 0010, budget gate, audit, permissions).
+`/gsd:execute 06-03` — Webhook simulate + feed/KPIs backend (wave 3).
 
 ## Key Decisions
 
@@ -45,13 +45,16 @@ Last activity: 2026-09-22 — v1.1 roadmap written (4 phases; v1.0 records prese
 | Plan | Duration | Tasks | Files |
 |------|----------|-------|-------|
 | Phase 06 P01 | 55m | 3 tasks | 14 files |
+| Phase 06 P02 | ~3h | 3 tasks | 13 files |
 
 ## Decisions
 
+- [Phase 6]: Trigger concurrency gate is the 0010 partial unique index itself — INSERT-as-gate, loser surfaces 409 (no read-then-insert race)
+- [Phase 6]: Plan pins reuse verbatim at spawn; manual/simulate runs never patch the deploy sticky comment (comment leg gated on trigger_source)
 - [Phase 6]: Pause mutations answer 200 + fresh CockpitState; reason-only wire body; zero ceiling is a typed refusal (BUDG-03)
 
 ## Session
 
 **Last session:** 2026-09-23T09:15:32.005Z
-**Stopped at:** Completed 06-01-PLAN.md
+**Stopped at:** Completed 06-02-PLAN.md
 **Resume file:** None

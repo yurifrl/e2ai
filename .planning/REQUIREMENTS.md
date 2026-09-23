@@ -126,11 +126,11 @@ Defined 2026-09-22 from research (STACK/FEATURES/ARCHITECTURE/PITFALLS/SUMMARY).
 
 ### Manual Trigger
 
-- [ ] **TRIG-01** *(P6)*: Admin can trigger a run without a deploy from the cockpit, registry card, plan page, or run re-run — creating a run with `trigger_source = 'manual'` (migration widens the check constraint), stamped with operator identity and optional reason, bypassing wait-rollout (app already deployed)
-- [ ] **TRIG-02** *(P6)*: Trigger picker lists only approved plan versions; draft/unapproved versions render disabled with a one-line reason; an app with zero approved versions cannot trigger and links to its Approvals-queue plans
-- [ ] **TRIG-03** *(P6)*: Trigger confirm shows the resolved plan identity (version, source PR/SHA), current budget state for the app (spend vs layered caps), and run shape; triggering is disabled with an explicit reason when budget is exhausted or the arm is paused — never silently queued
-- [ ] **TRIG-04** *(P6)*: Re-run always creates a new run row (append-only): "same commit (reproduce)" pins the original head SHA, "latest head (retest)" pulls current default branch; a manual run-retry is never a River job retry of the original execute job
-- [ ] **TRIG-05** *(P6)*: Manual runs never collide with the `(app_id, workflow_run_id)` webhook-dedupe key — synthetic ids come from a dedicated sequence (fail-closed regression test on uniqueness)
+- [x] **TRIG-01** *(P6)*: Admin can trigger a run without a deploy from the cockpit, registry card, plan page, or run re-run — creating a run with `trigger_source = 'manual'` (migration widens the check constraint), stamped with operator identity and optional reason, bypassing wait-rollout (app already deployed)
+- [x] **TRIG-02** *(P6)*: Trigger picker lists only approved plan versions; draft/unapproved versions render disabled with a one-line reason; an app with zero approved versions cannot trigger and links to its Approvals-queue plans
+- [x] **TRIG-03** *(P6)*: Trigger confirm shows the resolved plan identity (version, source PR/SHA), current budget state for the app (spend vs layered caps), and run shape; triggering is disabled with an explicit reason when budget is exhausted or the arm is paused — never silently queued
+- [x] **TRIG-04** *(P6)*: Re-run always creates a new run row (append-only): "same commit (reproduce)" pins the original head SHA, "latest head (retest)" pulls current default branch; a manual run-retry is never a River job retry of the original execute job
+- [x] **TRIG-05** *(P6)*: Manual runs never collide with the `(app_id, workflow_run_id)` webhook-dedupe key — synthetic ids come from a dedicated sequence (fail-closed regression test on uniqueness)
 
 ### Webhook Inbox
 
@@ -163,7 +163,7 @@ Defined 2026-09-22 from research (STACK/FEATURES/ARCHITECTURE/PITFALLS/SUMMARY).
 ### Audit & Budget Integrity
 
 - [x] **AUDT-01** *(P6)*: Every cockpit mutation attributes operator identity + timestamp in the affected row/log so "who triggered/killed/replayed this" is answerable from the UI
-- [ ] **BUDG-03** *(P6)*: Trigger-time budget gate: validates both ceilings strictly positive (ceiling 0 is never unlimited), aggregates spend per app/day against caps, and serializes concurrent triggers per run (no double-paid sessions from the racy read-then-insert path)
+- [x] **BUDG-03** *(P6)*: Trigger-time budget gate: validates both ceilings strictly positive (ceiling 0 is never unlimited), aggregates spend per app/day against caps, and serializes concurrent triggers per run (no double-paid sessions from the racy read-then-insert path)
 
 ### Out of Scope (v1.1 anti-features)
 

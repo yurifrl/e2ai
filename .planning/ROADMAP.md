@@ -199,7 +199,7 @@
 
 **Wave 2** *(blocked on Wave 1 completion)*
 
-- [ ] 06-02-PLAN.md — Manual trigger backend: atomic trigger tx (gates → insert → plan pin → audit → enqueue), approved-only picker data, pre-flight budget + plan identity, reproduce/retest semantics, spawn-gate pin acceptance, sticky-comment trigger_source gate
+- [x] 06-02-PLAN.md — Manual trigger backend: atomic trigger tx (gates → insert → plan pin → audit → enqueue), approved-only picker data, pre-flight budget + plan identity, reproduce/retest semantics, spawn-gate pin acceptance, sticky-comment trigger_source gate
 
 **Wave 3** *(blocked on Wave 2 completion)*
 
