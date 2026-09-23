@@ -380,9 +380,9 @@ Phase 6 is an **additive schema migration**, not a rename — full inventory not
 
 ## Open Questions
 
-1. **Pause blast radius (D4)** — decision 2 enumerates manual-trigger + simulate explicitly but says "the arm accepts no new runs, full stop." Does a paused arm refuse `/github/webhook` deliveries (and reconcile/sweep hand-offs), or only cockpit-initiated runs? → **user confirm** (recommend: block all creation, check flag at each insertion seam).
-2. **Staging BFF scope wiring** — `config/admin-bff.staging.yaml` was not read; who grants `admin.e2ai.edit` (which Okta groups/scopes)? → planner adds a `checkpoint:human-verify` for scope wiring; local dev works via mock users.
-3. **Executor first transition (A1)** — confirm from `suite/execute.go` Work body during planning (file was structurally read; body elided).
+1. **Pause blast radius (D4)** — decision 2 enumerates manual-trigger + simulate explicitly but says "the arm accepts no new runs, full stop." Does a paused arm refuse `/github/webhook` deliveries (and reconcile/sweep hand-offs), or only cockpit-initiated runs? → **user confirm** (recommend: block all creation, check flag at each insertion seam). **(RESOLVED — CONTEXT.md decision 2: pause blocks cockpit trigger + simulate; in-flight runs untouched.)**
+2. **Staging BFF scope wiring** — `config/admin-bff.staging.yaml` was not read; who grants `admin.e2ai.edit` (which Okta groups/scopes)? → planner adds a `checkpoint:human-verify` for scope wiring; local dev works via mock users. **(RESOLVED — 06-05 Task 4 `checkpoint:human-action` captures the staging Okta grant at execution.)**
+3. **Executor first transition (A1)** — confirm from `suite/execute.go` Work body during planning (file was structurally read; body elided). **(RESOLVED — PATTERNS.md:125 + 06-02:120: manual runs insert at `queued` and walk the same transitions as webhook runs; `waiting-rollout → provisioning` stays the executor's entry.)**
 
 ## Sources
 
