@@ -1,12 +1,58 @@
 {
   "contract": "1.0.0",
   "flavor": "core",
-  "milestone": "v1.0",
-  "phases": [],
+  "milestone": "v1.1 — Admin Cockpit",
+  "phases": [
+    {
+      "number": "1",
+      "name": "Web happy path",
+      "status": "complete"
+    },
+    {
+      "number": "2",
+      "name": "Plans, approvals, and test derivation",
+      "status": "complete"
+    },
+    {
+      "number": "3",
+      "name": "Agent roster and the agentic loop",
+      "status": "complete"
+    },
+    {
+      "number": "4",
+      "name": "Mobile surfaces",
+      "status": "complete"
+    },
+    {
+      "number": "5",
+      "name": "Flake governance, trends, and multi-app scale",
+      "status": "complete"
+    },
+    {
+      "number": "6",
+      "name": "Cockpit trigger, Command Center, and webhook simulate",
+      "status": "pending"
+    },
+    {
+      "number": "7",
+      "name": "Webhook Inbox",
+      "status": "pending"
+    },
+    {
+      "number": "8",
+      "name": "Outside-action consolidation",
+      "status": "pending"
+    },
+    {
+      "number": "9",
+      "name": "Apps registry completion and Jobs Observatory",
+      "status": "pending"
+    }
+  ],
   "next": {
     "command": "/gsd:progress --next",
-    "label": "Advance to the next step (plan phase 3)",
-    "reason": "Phase 3 of 5 — needs a plan"
+    "label": "Advance to the next step (plan phase 6)",
+    "reason": "Phase 6 of 4 — needs a plan"
   },
-  "updated_at": "2026-09-20T14:49:14.744Z"
+  "updated_at": "2026-09-23T07:39:51.812Z"
 }
