@@ -7,13 +7,18 @@
  * own state poll (Plan 01) so the pause control stays a single source.
  *
  * Report-only surface: everything here renders polled API truth — no
- * optimistic state, no mutations (trigger/simulate arrive in Plan 05).
+ * optimistic state. The Plan 05 mutation surfaces hang off this composition:
+ * the trigger panel (TRIG-01..05) expands under the pagehead behind the
+ * admin.e2ai.edit permission gate, and the webhook simulate card (ACTN-01)
+ * lives in the right rail.
  */
 import { useCallback, useMemo, useState } from 'react'
 import { Link } from 'react-router-dom'
-import { useI18n } from '@nsxbet/admin-sdk'
+import { useAuth, useI18n } from '@nsxbet/admin-sdk'
 import { KpiCards } from './KpiCards'
 import { AgentRail } from './AgentRail'
+import { TriggerPanel } from './TriggerPanel'
+import { SimulateCard } from './SimulateCard'
 import { StatusChip } from '../runs/chips'
 import { formatTimestamp } from '../runs/format'
 import type { RunStatus } from '../../lib/types'
@@ -43,6 +48,9 @@ export function CommandCenterPage() {
   const [openId, setOpenId] = useState<string | null>(null)
   const [older, setOlder] = useState<CockpitFeedPage[]>([])
   const [appending, setAppending] = useState(false)
+  const [triggerOpen, setTriggerOpen] = useState(false)
+  const { hasPermission } = useAuth()
+  const canEdit = hasPermission('admin.e2ai.edit')
 
   // The loaders key on the app filter: a changed identity restarts the poll
   // against the narrowed endpoints (usePolling effect deps).
@@ -108,6 +116,20 @@ export function CommandCenterPage() {
           <p className="text-sm text-muted-foreground">{t('cockpit.page.subline')}</p>
         </div>
         <div className="flex flex-wrap items-center gap-1.5">
+          {canEdit ? (
+            <button
+              type="button"
+              onClick={() => setTriggerOpen((open) => !open)}
+              aria-expanded={triggerOpen}
+              className={`rounded px-3 py-1 text-xs font-medium ${
+                triggerOpen
+                  ? 'bg-muted text-muted-foreground hover:bg-muted/70'
+                  : 'bg-primary text-primary-foreground hover:bg-primary/90'
+              }`}
+            >
+              {t('cockpit.trigger.cta')}
+            </button>
+          ) : null}
           <AppChip
             label={t('cockpit.feed.allApps')}
             active={appFilter == null}
@@ -124,6 +146,14 @@ export function CommandCenterPage() {
         </div>
       </div>
 
+      {triggerOpen && canEdit ? (
+        <TriggerPanel
+          apps={apps}
+          appId={appFilter}
+          onClose={() => setTriggerOpen(false)}
+        />
+      ) : null}
+
       <KpiCards kpis={kpis ?? null} kpisError={kpisError?.message ?? null} />
 
       <div className="grid grid-cols-1 gap-6 lg:grid-cols-[1fr_320px]">
@@ -139,8 +169,9 @@ export function CommandCenterPage() {
           onLoadMore={() => void loadMore()}
         />
 
-        <aside aria-label={t('cockpit.rail.title')}>
+        <aside aria-label={t('cockpit.rail.title')} className="space-y-6">
           <AgentRail sessions={sessions ?? null} error={railError?.message ?? null} />
+          {canEdit ? <SimulateCard apps={apps} /> : null}
         </aside>
       </div>
     </div>

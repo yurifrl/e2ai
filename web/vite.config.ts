@@ -58,7 +58,7 @@ export default defineConfig(() => {
           // identity headers the API's DEBUG fallback expects.
           headers: {
             'X-User': 'admin@example.com',
-            'X-Permissions': 'admin.e2ai.view',
+            'X-Permissions': 'admin.e2ai.view admin.e2ai.edit',
           },
         },
       },

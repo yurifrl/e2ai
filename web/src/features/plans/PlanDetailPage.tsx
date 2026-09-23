@@ -1,25 +1,30 @@
 /**
  * Plan detail: header metadata, full version history, and the rendered
  * markdown of the latest (or selected) version with a diff view against the
- * approval baseline. Approval decisions live in the approvals queue; this
- * page is read-only.
+ * approval baseline. Approval decisions live in the approvals queue. The one
+ * mutation surface is the Plan 05 trigger panel ("Trigger run" with the
+ * selected version preselected); everything else is read-only.
  */
 import { useEffect, useState } from 'react'
 import { Link, useParams } from 'react-router-dom'
-import { useI18n } from '@nsxbet/admin-sdk'
+import { useAuth, useI18n } from '@nsxbet/admin-sdk'
 import { getPlan } from '../../lib/api'
 import { formatTimestamp } from '../runs/format'
 import { PlanContentPanel, VersionDiff } from './PlanContent'
 import { PlanStatusChip } from './chips'
+import { TriggerPanel } from '../cockpit/TriggerPanel'
 import type { PlanDetail } from '../../lib/types'
 
 export function PlanDetailPage() {
   const { id } = useParams()
   const { t } = useI18n('e2ai')
+  const { hasPermission } = useAuth()
+  const canEdit = hasPermission('admin.e2ai.edit')
   const [detail, setDetail] = useState<PlanDetail | null>(null)
   const [error, setError] = useState<string | null>(null)
   const [selectedVersionId, setSelectedVersionId] = useState<string | null>(null)
   const [showDiff, setShowDiff] = useState(false)
+  const [triggerOpen, setTriggerOpen] = useState(false)
 
   useEffect(() => {
     if (!id) return
@@ -61,7 +66,23 @@ export function PlanDetailPage() {
         </Link>
         <div className="flex items-center justify-between">
           <h1 className="text-xl font-semibold">{plan.title}</h1>
-          <PlanStatusChip status={plan.status} />
+          <div className="flex items-center gap-2">
+            <PlanStatusChip status={plan.status} />
+            {canEdit && plan.app_id ? (
+              <button
+                type="button"
+                onClick={() => setTriggerOpen((open) => !open)}
+                aria-expanded={triggerOpen}
+                className={`rounded px-3 py-1 text-xs font-medium ${
+                  triggerOpen
+                    ? 'bg-muted text-muted-foreground hover:bg-muted/70'
+                    : 'bg-primary text-primary-foreground hover:bg-primary/90'
+                }`}
+              >
+                {t('cockpit.trigger.cta')}
+              </button>
+            ) : null}
+          </div>
         </div>
         <p className="text-sm text-muted-foreground">
           <span className="font-mono">{plan.app}</span>
@@ -71,6 +92,17 @@ export function PlanDetailPage() {
           {plan.trigger}
         </p>
       </div>
+
+      {triggerOpen && canEdit && plan.app_id ? (
+        <TriggerPanel
+          apps={[plan.app_id]}
+          appId={plan.app_id}
+          lockApp
+          presetPlan={plan}
+          presetVersions={versions}
+          onClose={() => setTriggerOpen(false)}
+        />
+      ) : null}
 
       <section>
         <h2 className="mb-2 font-medium">{t('plans.versions')}</h2>

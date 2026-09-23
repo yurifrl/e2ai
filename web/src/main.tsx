@@ -39,8 +39,10 @@ const moduleManifest = manifest as import('@nsxbet/admin-sdk').AdminModuleManife
 const useBffAuth = import.meta.env.VITE_BFF_AUTH === 'true'
 const bffBaseUrl = import.meta.env.VITE_BFF_BASE_URL || 'http://localhost:8080'
 const mockUsers = createMockUsersFromRoles({
-  admin: ['admin.e2ai.view'],
-  editor: ['admin.e2ai.view'],
+  // Plan 05: dev identities need the edit rung too — every cockpit mutation
+  // (trigger / pause / simulate) otherwise 403s in standalone dev.
+  admin: ['admin.e2ai.view', 'admin.e2ai.edit'],
+  editor: ['admin.e2ai.view', 'admin.e2ai.edit'],
   viewer: ['admin.e2ai.view'],
   noAccess: [],
 })

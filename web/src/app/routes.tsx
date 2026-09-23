@@ -1,4 +1,5 @@
 import type { RouteObject } from 'react-router-dom'
+import { CommandCenterPage } from '../features/cockpit/CommandCenterPage'
 import { RunsListPage } from '../features/runs/RunsListPage'
 import { RunDetailPage } from '../features/runs/RunDetailPage'
 import { RunReportPage } from '../features/runs/RunReportPage'
@@ -20,7 +21,7 @@ export function routes(): RouteObject[] {
   return [
     {
       index: true,
-      element: <RunsListPage />,
+      element: <CommandCenterPage />,
     },
     {
       path: 'runs',

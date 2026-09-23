@@ -40,6 +40,8 @@ export interface Run {
   head_branch: string | null
   environment: string
   trigger_source: 'WEBHOOK' | 'RECONCILE' | 'SWEEP' | 'MANUAL' | 'SIMULATE'
+  /** Manual-trigger operator attribution (AUDT-01); null for webhook/reconcile/sweep runs. */
+  triggered_by: string | null
   status: RunStatus
   verdict: Verdict | null
   pr_number: number | null
@@ -127,6 +129,8 @@ export type PlanStatus = 'draft' | 'pending_approval' | 'approved' | 'superseded
 export interface Plan {
   id: string
   app: string
+  /** Registered-app UUID (Phase 06); absent while the row's app_id is NULL. */
+  app_id?: string
   title: string
   surfaces: string[]
   trigger: string
@@ -473,4 +477,50 @@ export interface CockpitBudget {
   remaining_capped: boolean
   refused: boolean
   reason?: string
+}
+
+/* ------------------------------------------------------------------ */
+/* Manual trigger + webhook simulate (Plan 05; locked verbatim to      */
+/* api/internal/cockpit/{trigger,trigger_http,simulate,simulate_http}.go). */
+/* ------------------------------------------------------------------ */
+
+/** POST /api/cockpit/triggers body (TriggerRequest json tags). */
+export interface CockpitTriggerRequest {
+  app_id: string
+  head_sha: string
+  head_branch?: string
+  environment: string
+  reason?: string
+  /** '' (plain) | 'reproduce' | 'retest' — retest ignores head_sha; the server resolver replaces it. */
+  mode?: '' | 'reproduce' | 'retest'
+  /** Required with mode 'reproduce'/'retest': the run being re-run. */
+  source_run_id?: string
+  /** The approved plan version the run pins at trigger time. */
+  plan_version_id: string
+}
+
+/** 202 ack from POST /api/cockpit/triggers (triggerDTO). */
+export interface CockpitTriggerAck {
+  run_id: string
+  workflow_run_id: number
+}
+
+/**
+ * POST /api/cockpit/simulate body. The server's SimulateRequest has NO json
+ * tags, so the wire keys are the exact Go field names (encoding/json matches
+ * case-insensitively but ignores underscores) — these are NOT snake_case.
+ */
+export interface CockpitSimulateRequest {
+  AppID: string
+  /** 'workflow_run' is the run-creating flavor; anything else records an ingest passthrough. */
+  PayloadShape: string
+  Reason?: string
+}
+
+/** 202 ack from POST /api/cockpit/simulate (simulateDTO). */
+export interface CockpitSimulateAck {
+  /** 'accepted' | 'recorded' | 'already-ingested' (ingest.Result.String). */
+  outcome: string
+  run_id?: string
+  workflow_run_id: number
 }

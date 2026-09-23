@@ -43,6 +43,10 @@ import type {
   CockpitBudget,
   CockpitFeedPage,
   CockpitKpis,
+  CockpitTriggerRequest,
+  CockpitTriggerAck,
+  CockpitSimulateRequest,
+  CockpitSimulateAck,
 } from './types'
 
 export class ApiError extends Error {
@@ -272,4 +276,19 @@ export function getCockpitAgents(appId?: string): Promise<CockpitAgentSession[]>
 
 export function getCockpitBudget(appId: string): Promise<CockpitBudget> {
   return getJson(`/api/cockpit/budget?app_id=${encodeURIComponent(appId)}`)
+}
+
+/* Manual trigger (TRIG-01..05, Plan 05): the ONLY success state is the
+ * server's 202 ack — no optimistic UI. Refusals (409 pause/budget/active-run/
+ * unapproved-plan, 422 validation) arrive as ApiError with the server's
+ * specific reason text, rendered verbatim in the panel. */
+export function postCockpitTrigger(req: CockpitTriggerRequest): Promise<CockpitTriggerAck> {
+  return postJson('/api/cockpit/triggers', req)
+}
+
+/* Webhook simulate (ACTN-01/02, Plan 05): same ack-only posture. The body's
+ * keys are the server's Go field names (SimulateRequest has no json tags) —
+ * see CockpitSimulateRequest in types.ts. */
+export function postCockpitSimulate(req: CockpitSimulateRequest): Promise<CockpitSimulateAck> {
+  return postJson('/api/cockpit/simulate', req)
 }
