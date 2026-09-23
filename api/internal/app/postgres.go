@@ -26,6 +26,7 @@ var migrationsFS embed.FS
 // migration tables owned by this package, in drop order for Down (children
 // before parents; app_migrations last).
 var appTables = []string{
+	"cockpit_state", "audit_events",     // phase-6 cockpit substrate (0010)
 	"corpus_repair_proposals",           // phase-5 hardening schema (0009)
 	"alert_events",                      // phase-5 hardening schema (0008)
 	"webhook_triage", "test_quarantine", // phase-5 hardening schema (0007)

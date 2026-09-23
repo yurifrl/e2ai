@@ -17,6 +17,7 @@ import (
 	"github.com/NSXBet/e2ai/api/internal/agents"
 	"github.com/NSXBet/e2ai/api/internal/app"
 	"github.com/NSXBet/e2ai/api/internal/approvals"
+	"github.com/NSXBet/e2ai/api/internal/cockpit"
 	"github.com/NSXBet/e2ai/api/internal/derive"
 	"github.com/NSXBet/e2ai/api/internal/flakes"
 	"github.com/NSXBet/e2ai/api/internal/ingest"
@@ -287,6 +288,14 @@ func run() error {
 		mcpSurface = mcp.New(pool.Pool, runnerToken, cfg.ReportBaseURL, cfg.ReportLinkSecret)
 	}
 
+	// COCK-04 cockpit surface: the arm-state read plus the two attributed
+	// pause mutations (audit row written in the same transaction). Same
+	// degraded posture — unmounted when postgres is down.
+	var cockpitSurface *cockpit.Service
+	if pool != nil {
+		cockpitSurface = cockpit.NewService(pool.Pool, cfg.DevFallbackUser, logger)
+	}
+
 	handler := httpx.IdentityWithConfig(
 		httpx.IdentityConfig{DevFallbackUser: cfg.DevFallbackUser},
 		httpx.RequestLog(httpx.RedactSecrets(logger, map[string]string{
@@ -294,7 +303,7 @@ func run() error {
 			"GITHUB_TOKEN":              cfg.GitHubToken,
 			"E2AI_REPORT_LINK_SECRET":   cfg.ReportLinkSecret,
 			"E2AI_RUNNER_SERVICE_TOKEN": runnerToken,
-		}), newMux(dbHealth, webhook, runsSurface, plansSurface, approvalsSurface, agentsSurface, flakesSurface, trendsSurface, mcpSurface, pool, riverClient)),
+		}), newMux(dbHealth, webhook, runsSurface, plansSurface, approvalsSurface, agentsSurface, flakesSurface, trendsSurface, mcpSurface, cockpitSurface, pool, riverClient)),
 	)
 	server := &http.Server{
 		Addr:              ":" + strconv.Itoa(cfg.Port),
@@ -322,7 +331,7 @@ func run() error {
 
 // newMux returns the api HTTP surface: liveness/health, the GitHub webhook,
 // and (when postgres is up) the T11 runs + artifacts surface.
-func newMux(dbHealth func() bool, webhook http.Handler, runs *report.RunsHTTP, plans *plans.PlansHTTP, approvals *approvals.ApprovalsHTTP, agentSessions *agents.AgentsHTTP, flakesSurface *flakes.QuarantineHTTP, trendsSurface *trends.TrendsHTTP, mcpSurface *mcp.Surface, pool *postgres.Pool, riverClient *river.Client) http.Handler {
+func newMux(dbHealth func() bool, webhook http.Handler, runs *report.RunsHTTP, plans *plans.PlansHTTP, approvals *approvals.ApprovalsHTTP, agentSessions *agents.AgentsHTTP, flakesSurface *flakes.QuarantineHTTP, trendsSurface *trends.TrendsHTTP, mcpSurface *mcp.Surface, cockpitSurface *cockpit.Service, pool *postgres.Pool, riverClient *river.Client) http.Handler {
 	mux := http.NewServeMux()
 	mux.HandleFunc("/healthz", func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
@@ -367,6 +376,10 @@ func newMux(dbHealth func() bool, webhook http.Handler, runs *report.RunsHTTP, p
 	if mcpSurface != nil {
 		// MCP read-only surface (MCP-01): JSON-RPC for coding agents.
 		mcpSurface.Mount(mux)
+	}
+	if cockpitSurface != nil {
+		// Cockpit surface (COCK-04): arm state + attributed pause control.
+		cockpitSurface.Mount(mux)
 	}
 	if agentSessions != nil {
 		// Agents surface (AGNT-03): runner lifecycle (service token), the
