@@ -133,7 +133,7 @@ Defined 2026-09-22 from research (STACK/FEATURES/ARCHITECTURE/PITFALLS/SUMMARY).
 
 ### Admin Actions
 
-- [ ] **ACTN-01** *(P8)*: Simulate webhook from the cockpit: pick app + payload shape; the api server renders and HMAC-signs with the app's resolved secret (secrets never reach the browser); result shows ingest outcome + created run link
+- [ ] **ACTN-01** *(P6)*: Simulate webhook from the cockpit: pick app + payload shape; the api server renders and HMAC-signs with the app's resolved secret (secrets never reach the browser); result shows ingest outcome + created run link
 - [ ] **ACTN-02** *(P8)*: Run Detail "Add agent session" with role picker, enabled only while the run is executing, surfacing the approved-plan gate inline and the budget it will consume
 - [ ] **ACTN-03** *(P8)*: Kill action on agent-session rows (Run Detail + agent rail) with reason field landing in the append-only error note; the API's 409 race semantics ("another actor finalized the session") surface verbatim
 - [ ] **ACTN-04** *(P8)*: Plans-sync is one click on the Plans page header and app cards, showing the sync result (plans added/updated)
@@ -178,7 +178,8 @@ Defined 2026-09-22 from research (STACK/FEATURES/ARCHITECTURE/PITFALLS/SUMMARY).
 | Command Center | COCK-01..04 | 6 |
 | Manual Trigger | TRIG-01..05 | 6 |
 | Webhook Inbox | INBX-01..03 | 7 |
-| Admin Actions | ACTN-01..06 | 8 |
+| Webhook Simulate | ACTN-01 | 6 |
+| Admin Actions | ACTN-02..06 | 8 |
 | App Registry | APPS-04..07 | 9 |
 | Jobs Observatory | JOBS-01..03 | 9 |
 | Audit & Budget | AUDT-01, BUDG-03 | 6 |

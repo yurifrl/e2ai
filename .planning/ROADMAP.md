@@ -1,11 +1,41 @@
 # Project Roadmap: E2AI — the Always-On AI QA Arm
 
-**Generated:** 2026-09-19
+**Generated:** 2026-09-19 (v1.0) — v1.1 milestone added 2026-09-22
 **Project:** @admin/e2ai (module `@admin/e2ai`, routeBase `/e2ai`)
-**Requirements:** .planning/REQUIREMENTS.md — 45 requirements, 12 areas, 100% phase-mapped
+**Requirements:** .planning/REQUIREMENTS.md — 72 total: 45 v1.0 (shipped) + 27 v1.1 Admin Cockpit, 100% phase-mapped
 **Invariant:** report-only everywhere — nothing in this roadmap gates a merge, deploy, or CI check
 
-## Project Phases
+## Phases
+
+**Phase Numbering:**
+- Integer phases (1, 2, 3): planned milestone work — continuous across milestones (v1.0: Phases 1–5 shipped; v1.1: Phases 6–9)
+- Decimal phases (2.1, 2.2): urgent insertions via `/gsd-phase --insert`
+
+- [x] **Phase 1: Web happy path: deterministic foundation** - webhook → deterministic suite → verdicts → live reports on every deploy
+- [x] **Phase 2: Plans, approvals, and test derivation** - declarative plans + approval queue, PR-diff derivation, corpus oracle
+- [x] **Phase 3: Agent roster and the agentic loop** - five governed agents drive web runs with budgets and a zero-credential sandbox
+- [x] **Phase 4: Mobile surfaces** - Android emulator + iOS simulator, WebView-aware capture, pinned runner images
+- [x] **Phase 5: Flake governance, trends, and multi-app scale** - flake governance, trends, MCP surface, edge sweeps, second app
+- [ ] **Phase 6: Cockpit trigger, Command Center, and webhook simulate** - manual trigger behind a pre-flight budget gate, module-root Command Center, server-side simulate; mints the shared substrate (migration 0010, budget gate, audit, permissions)
+- [ ] **Phase 7: Webhook Inbox** - deliveries inbox with ingest outcomes, raw payload viewer, GitHub redelivery, unclaimed-triage registration deep links
+- [ ] **Phase 8: Outside-action consolidation** - kill, add-session, plans-sync, canary run-now, MCP probe, orphan sweep under one action contract
+- [ ] **Phase 9: Apps registry completion and Jobs Observatory** - registry CRUD with vault-ref secrets + first admin-rung consumers, River jobs observatory with guarded cancel and queue pause
+
+## Milestone Progress
+
+| Phase | Milestone | Plans Complete | Status | Completed |
+|-------|-----------|----------------|--------|-----------|
+| 1. Web happy path | v1.0 | — | Complete | 2026-09-22 |
+| 2. Plans, approvals, and test derivation | v1.0 | — | Complete | 2026-09-22 |
+| 3. Agent roster and the agentic loop | v1.0 | — | Complete | 2026-09-22 |
+| 4. Mobile surfaces | v1.0 | — | Complete | 2026-09-22 |
+| 5. Flake governance, trends, and multi-app scale | v1.0 | — | Complete | 2026-09-22 |
+| 6. Cockpit trigger, Command Center, and webhook simulate | v1.1 | — | Not started | - |
+| 7. Webhook Inbox | v1.1 | — | Not started | - |
+| 8. Outside-action consolidation | v1.1 | — | Not started | - |
+| 9. Apps registry completion and Jobs Observatory | v1.1 | — | Not started | - |
+
+## Milestone v1.0 — the Always-On QA Arm (shipped 2026-09-22)
 
 ### Phase 1: Web happy path: deterministic foundation
 **Goal:** The full report-only QA loop for bet-app web on every deploy: webhook → run → deterministic Playwright suite → verdicts → live HTML report + sticky PR comment.
@@ -115,6 +145,106 @@
 **Depends on:** Phase 3 (agent roster) + accumulated run history from Phases 1–3
 **Guardrails:** No auto-healing below the confidence floor. Edge sweeps opt-in, bounded.
 
+## Milestone v1.1 — Admin Cockpit
+
+**Milestone goal:** Admins run and steer the shipped report-only arm from the cockpit: trigger runs without a deploy, watch everything from a Command Center landing page, debug webhooks in an inbox, consolidate operator actions, and manage the registry and River jobs. Zero new dependencies — a new web feature section plus a new Go surface package built strictly from patterns already in this repo (RTK/Connect-RPC stay out per the stack-reality decision in PROJECT.md).
+
+**Order is deliberate (research MVP consensus):** Phase 6 mints the shared substrate every later phase inherits — migration `0010_cockpit.sql`, the trigger-time budget gate (pitfalls P1–P3 prevented at the trigger boundary), the audit-attribution pattern (M4), and permission wiring. The Webhook Inbox is maximal pain-per-effort; Outside-Action Consolidation is pure wiring; Registry/Jobs is the largest new API surface and carries the open design decisions flagged below. v1.0 pages stay additive-only throughout: new actions attach to existing pages, nothing is reworked.
+
+### Phase 6: Cockpit trigger, Command Center, and webhook simulate
+**Goal:** Operators run and steer the arm from a single pane: manual triggering behind a visible pre-flight budget gate, a Command Center as the module's landing page, and server-side webhook simulation — the phase that mints the shared substrate (migration 0010, budget gate, audit attribution, permission wiring) every later phase reuses.
+
+**Delivers:**
+- Shared substrate: `0010_cockpit.sql` (widens the `trigger_source` check constraint for `'manual'` + audit attribution columns); trigger-time budget gate (BUDG-03: strict-positive ceiling validation — ceiling 0 is rejected at the trigger API boundary, aggregate app/day spend against caps, insert-serialized concurrent triggers on the racy read-then-insert path); M4 audit row written in the same tx as every cockpit mutation (ingest tx as template); `admin.e2ai.edit` permission wiring with BFF identity attribution
+- Manual trigger (TRIG-01..05): trigger from cockpit/registry card/plan page/re-run stamped with operator identity + optional reason, bypassing wait-rollout; approved-versions-only picker with disabled drafts and a zero-approved-apps escape hatch to Approvals; confirm showing resolved plan identity, current budget state, and run shape; append-only re-run semantics ("same commit (reproduce)" pins the original head SHA, "latest head (retest)" pulls current default branch); synthetic run ids from a dedicated sequence with a fail-closed uniqueness regression test; pinned plan version id + content hash at trigger time with a spawn gate that accepts the pinned hash even if superseded after run creation
+- Command Center (COCK-01..04): sketch 001-A as the module-root landing page — KPI header (runs today, pass rate today, pending-approvals badge, budget spend vs cap, paused/kill-switch state), reverse-chron live feed with inline detail strips + app filter chips, agent rail with API-computed stuck flags (>90s lapsed heartbeat) linking to Run Detail, global pause control in the KPI header (paused blocks all new triggers with an explicit reason; state visible at all times)
+- Webhook simulate (ACTN-01): pick app + payload shape; the api server renders and HMAC-signs with the app's resolved secret (secrets never reach the browser); result shows ingest outcome + created run link — trigger and simulate both drive the Ingest seam
+- Comment discipline: sticky PR comments publish only for deploy runs (`trigger_source`-gated); manual runs report on Run Detail only, never racing the deploy run's sticky comment
+
+**Requirements covered:** COCK-01..04, TRIG-01..05, ACTN-01, AUDT-01, BUDG-03 (12/27)
+
+**Success criteria:**
+- An admin opening the module root lands on the Command Center: the KPI header shows runs today, pass rate today, pending-approvals badge, budget spend vs cap, and pause/kill state; the reverse-chron feed updates as runs progress, rows expand inline to verdict/duration/cost/evidence, and app filter chips constrain the feed
+- The agent rail lists live sessions (role, status, heartbeat age) and flags stuck sessions (>90s lapsed heartbeat) with a link to Run Detail; session failures, quarantined flakes, and triage arrivals appear as feed events
+- An admin triggers a run without a deploy from cockpit, registry card, plan page, or run re-run: the run carries `trigger_source='manual'`, operator identity, and optional reason, and starts without wait-rollout; re-run always appends a new run row (reproduce pins the original SHA, retest pulls latest head) and manual synthetic ids never collide with the `(app_id, workflow_run_id)` webhook-dedupe key
+- The trigger picker lists only approved plan versions (drafts disabled with a one-line reason; zero-approved apps link to their Approvals-queue plans); triggering is disabled with an explicit reason when budget is exhausted or the arm is paused — never silently queued; two concurrent triggers serialize to exactly one 202 and one 409; a zero-ceiling plan is rejected at the trigger boundary
+- Simulate webhook produces an ingest outcome and, when accepted, a created-run link, with secrets rendered and HMAC-signed server-side only; every cockpit mutation leaves operator identity + timestamp answerable from the affected row in the UI; a manual run on the same SHA as a deploy run never PATCHes the deploy run's sticky PR comment
+
+**Depends on:** v1.0 (deploy ingest seam, runs, verdicts, reports, approvals — the cockpit actuates the shipped pipeline; no v1.1 phase can precede it)
+**Guardrails:** Report-only invariant — trigger/simulate/pause actuate the arm, never the app under test. Ceiling-0 rejected at the trigger boundary (engine sentinel semantics unchanged). Spawn gates accept the pinned hash; no re-resolving "current approved" for pinned runs. No auto-approval — the Approvals queue stays the only approval path.
+**Plans**: TBD
+**UI hint**: yes
+
+### Phase 7: Webhook Inbox
+**Goal:** Webhook debugging leaves psql/curl: every delivery lands in a cockpit inbox with its ingest outcome, raw payload, and recovery actions, and orphaned ("belongs to no registered app") deliveries become first-class rows that resolve by registering the app.
+
+**Delivers:**
+- Deliveries page (INBX-01): reverse-chron webhook events with app badge, signature badge, and ingest-outcome chips (ingested→run link, duplicate, redelivered, triaged, rejected); row expand shows parsed metadata, raw JSON payload viewer, and links (View run, Open in GitHub)
+- Redeliver (INBX-02): per-delivery GitHub redeliver action with a consequence sentence and cooldown; re-ingest flows the same idempotent dedupe path (duplicate = harmless, recorded)
+- Unclaimed triage as first-class inbox rows (INBX-03): "belongs to no registered app" rows with a register-app deep link pre-filling owner/repo/workflow from the payload; on save the triage row resolves and past unclaimed deliveries for that repo show "now claimed" (no retroactive re-ingest)
+- Mounted endpoints: `GET /api/cockpit/webhook-events` + `/api/cockpit/triage` (mounts the existing `ListTriage` query) + ingest re-drive retry — routed via the BFF `e2aiApiBase`, never the module origin's `/api/`
+- Cross-phase contract: the register-app deep link targets the registration surface; where that surface is Phase 9's wizard (APPS-05), the wizard honors the pre-fill contract established here
+
+**Requirements covered:** INBX-01..03 (3/27)
+
+**Success criteria:**
+- Today's webhook deliveries render reverse-chron with app/signature badges and outcome chips; expanding a rejected or triaged row shows the parsed metadata and raw payload that explain the outcome, with working View run / Open in GitHub links where applicable
+- Redelivering a delivery re-flows GitHub's event through the same dedupe path: a duplicate lands harmless and recorded — never a second run for the same run id
+- An unclaimed triage row states it belongs to no registered app; its register-app deep link carries owner/repo/workflow pre-filled from the payload; after a save the row resolves and that repo's past unclaimed deliveries flip to "now claimed" with no retroactive re-ingest
+- App and outcome filters constrain the inbox and polling keeps it live without a page reload
+
+**Depends on:** Phase 6 (audit + permission substrate, BFF route pattern; the re-drive retry inherits the audit pattern)
+**Guardrails:** Read surface + bounded retry actions only. Redeliver is the sole external call (GitHub API), behind a consequence sentence + cooldown. No retroactive re-ingest of claimed deliveries.
+**Plans**: TBD
+**UI hint**: yes
+
+### Phase 8: Outside-action consolidation
+**Goal:** The remaining operator actions reach the cockpit under one consistent action contract — kill with reason, mid-run session add, one-click plans-sync, canary run-now, MCP probe, orphan sweep — attached to existing v1.0 pages without reworking them.
+
+**Delivers:**
+- Run Detail actions (ACTN-02..03): "Add agent session" with role picker, enabled only while the run executes, surfacing the approved-plan gate inline and the budget it will consume; kill on agent-session rows (Run Detail + agent rail) with a reason field landing in the append-only error note, the API's 409 race semantics ("another actor finalized the session") surfaced verbatim
+- Plans-sync (ACTN-04): one click on the Plans page header showing the sync result (plans added/updated) — `syncAppPlans` finally consumed by a page; the app-card instance of this action lands with the registry cards in Phase 9
+- Utility actions (ACTN-05): canary run-now, MCP probe (read-only tools/list + one bounded call showing latency + raw response, no budget), force orphan sweep
+- Shared action contract (ACTN-06): consequence sentence before commit, confirm only where destructive, server-ack waits (no optimistic UI), API errors verbatim; existing v1.0 actions (approve/reject, quarantine, corpus promote, alert acknowledge) verified non-regressed
+
+**Requirements covered:** ACTN-02..06 (5/27)
+
+**Success criteria:**
+- "Add agent session" on Run Detail offers the role picker only while the run executes, states the approved-plan gate and the budget it will consume, and the new session appears in the agent rail consuming exactly that budget
+- Killing a session from Run Detail or the agent rail writes the operator's reason into the append-only error note; when another actor finalized the session first, the API's 409 sentence surfaces verbatim
+- Plans-sync from the Plans page header completes without leaving the page and reports what was added/updated
+- Canary run-now, MCP probe (latency + raw response shown, zero budget consumed), and force orphan sweep each complete with visible results
+- Every mutating action follows the shared contract — consequence sentence before commit, server-ack wait, verbatim API errors — and approve/reject, quarantine, corpus promote, and alert acknowledge still work unchanged
+
+**Depends on:** Phase 6 (budget gate, audit pattern, confirm pattern, permission wiring)
+**Guardrails:** v1.0 pages are additive-only — actions attach, nothing reworked. MCP probe is read-only and budget-free. Server-ack waits everywhere; no optimistic UI.
+**Plans**: TBD
+**UI hint**: yes
+
+### Phase 9: Apps registry completion and Jobs Observatory
+**Goal:** The registry becomes a managed surface and River jobs become observable and governable — with the `admin.e2ai.admin` permission rung's first real consumers verified end-to-end in staging.
+
+**Delivers:**
+- Registry cards (APPS-04): per-app health summary (runs today, last verdict, agent mini-rail), config state (edge-sweep, thresholds, quarantine/triage counts), detail view; cards carry the plans-sync action established in Phase 8
+- Add/edit wizard (APPS-05..06): registration fields + flake thresholds + edge-sweep toggle; secrets as 1Password references only — never raw values — with server-side resolution verified before save; duplicate repo/workflow/environment surfaces the unique-constraint error inline; delete is a two-step typed-slug confirm with dependency warning, keeping run history and only stopping registration + ingest matching; honors the register-app deep-link pre-fill contract from Phase 7 (INBX-03)
+- Admin rung's first consumers (APPS-07, JOBS-03): registry CRUD + queue pause/resume gated by `admin.e2ai.admin`, with the BFF→header→permission chain verified in staging
+- Jobs observatory (JOBS-01..02): River jobs list with state/queue/kind filters and cursor pagination plus a canary card (inert vs active, pinned image, last canary verdict); guarded cancel (River cancel paired with a guarded run-state transition + error note, idempotent re-cancel); retry offered only for default-queue kinds (report, plans sync, derive draft) — run-level retry routes to the manual re-run flow (TRIG-04)
+- Queue pause/resume (JOBS-03): persistent pause banner naming the blast radius (pausing `default` silently stalls wait-rollout), state survives restarts, pause state reflected in the Command Center KPI header
+
+**Requirements covered:** APPS-04..07, JOBS-01..03 (7/27)
+
+**Success criteria:**
+- A new app registers through the wizard with a vault-ref secret the server verified resolves; a duplicate repo/workflow/environment combination shows the constraint error inline; no raw secret value is ever accepted or displayed
+- Deleting an app requires typing the slug, warns about dependencies, keeps run history, and only stops registration + ingest matching
+- The jobs page filters by state/queue/kind with cursor pagination; cancelling a job leaves a coherent run state + error note; retry is offered only for default-queue kinds, and a run-level retry routes to the manual re-run flow instead
+- Pausing a queue shows a persistent banner warning about wait-rollout stalls (for the `default` queue), survives an api restart, and flips the Command Center KPI pause state
+- A non-admin is refused at the gate for registry CRUD and queue pause/resume while an admin's actions succeed — the BFF→header→permission chain verified in staging
+
+**Depends on:** Phase 6 (permission wiring, Command Center KPIs, synthetic re-run flow) + Phase 8 (action contract; plans-sync anchor on cards)
+**Guardrails:** Two flagged planning decisions bound this phase (research gaps): registry source of truth (YAML-canonical vs DB-canonical `registered_apps`) and River cancel propagation (verify the runner client's listener control-event config, or defer `JobCancel` entirely — retry + observe first). No raw secret entry/display anywhere. New actions stay additive to v1.0 pages.
+**Plans**: TBD
+**UI hint**: yes
+
 ## Roadmap-Level Notes
 
 - **Order is deliberate:** deterministic spine first (P1), human-supervised autonomy second (P2), agentic execution third (P3) — agents must beat the deterministic baseline and inherit verdict/report plumbing, not bootstrap their own. Mobile (P4) only after the web loop proves out; governance (P5) needs accumulated history to be meaningful.
@@ -125,8 +255,9 @@
 ## Verification Approach
 
 - Phase-level: gsd-verifier goal-backward check against the success criteria above; UI phases via live-DOM verification
-- Cross-phase: integration check after Phase 3 (deterministic + agentic runs coexist on the same report surface) and after Phase 5 (second app + MCP consumer)
+- Cross-phase (v1.0): integration check after Phase 3 (deterministic + agentic runs coexist on the same report surface) and after Phase 5 (second app + MCP consumer)
+- Cross-phase (v1.1): staging verification of the BFF → header → permission chain when the first consumer of each permission rung lands (edit rung in Phase 6, admin rung in Phase 9); integration check after Phase 8 that every cockpit action coexists with v1.0 pages without regression
 
 ---
-*Roadmap generated: 2026-09-19*
-*Aligned with: SUMMARY.md 5-phase skeleton, REQUIREMENTS.md coverage (45/45 mapped)*
+*Roadmap generated: 2026-09-19 — v1.1 Admin Cockpit milestone added 2026-09-22*
+*Aligned with: v1.1 SUMMARY.md 4-phase skeleton, REQUIREMENTS.md coverage (v1.0: 45/45 shipped; v1.1: 27/27 mapped, 0 unmapped)*
