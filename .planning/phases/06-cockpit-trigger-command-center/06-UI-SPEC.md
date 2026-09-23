@@ -73,7 +73,7 @@ Declared values (multiples of 4, mapped 1:1 to theme tokens `--space-*` in `.pla
 | xl | 32px | Layout gaps between page regions (`--space-8`) |
 | 2xl | 48px | Major section breaks (top-of-page only) (`--space-12`) |
 
-Exceptions: none. 64px is not used in this phase's sketch or theme — do not introduce it.
+Exceptions: two sketch-locked micro-values below 4px token granularity — evidence-thumb gap 5px, status-dot halo 3px (sketch pixel contract, not theme tokens). 64px is not used in this phase's sketch or theme — do not introduce it.
 
 Layout lock (sketch CSS): `.feedwrap` = `grid-template-columns: 1fr 320px; gap: var(--space-6)`; feed row = `grid-template-columns: 58px 1fr 150px 24px; gap: 12px`, row padding `12px 16px`; expanded detail left-inset `76px`; evidence thumbs `62×42px` with `5px` gap; agent-rail status dot `8px` with `3px` halo.
 
@@ -81,17 +81,18 @@ Layout lock (sketch CSS): `.feedwrap` = `grid-template-columns: 1fr 320px; gap: 
 
 ## Typography
 
-Font stack: Inter (`--font-sans`), JetBrains Mono (`--font-mono`). Weights are deliberately three: the sketch (locked source of truth) mandates 700 for display numerals, the page title, and rail-card titles; 600 for chips/labels/buttons; 400 for body. Sizes are five, all sketch-locked or roadmap-mandated — treat the ramp as closed.
+Font stack: Inter (`--font-sans`), JetBrains Mono (`--font-mono`). Ramp: exactly four sizes and two weights — 400 for body, 600 for everything emphasized (chips, labels, buttons, titles, KPI numerals). This amends the locked sketch with two one-line deltas, same mechanism as the 4→5 KPI-card amendment: display numerals drop 26px→28px (single display size) and 700→600 (weight consolidation).
 
 | Role | Size | Weight | Line Height | Usage |
 |------|------|--------|-------------|-------|
 | Body | 16px | 400 | 1.5 | Form inputs, panel body copy, confirm block lines |
 | Dense body | 14px | 400 | 1.5 | Feed detail/agent lines, rail secondary text, runlines |
-| Label / chip / mono metadata | 12px | 600 | 1.2 | Status + verdict chips, KPI labels (uppercase, letter-spacing 0.07em), timestamps, SHAs, ids — mono for machine values (`--font-mono`) |
-| Display | 26px | 700 | 1.2, letter-spacing −0.5px | KPI numerals (sketch `.kpi .val`); `small` suffix (%, units) 13px |
-| Page title | 28px | 700 | 1.2 | Pagehead h1 (`--text-2xl`) |
+| Label / chip / mono metadata | 12px | 600 | 1.2 | Status + verdict chips, KPI labels (uppercase, letter-spacing 0.07em), timestamps, SHAs, ids, KPI `small` suffix (%, units; folded from 13px) — mono for machine values (`--font-mono`) |
+| Display + page title | 28px | 600 | 1.2, letter-spacing −0.5px (numerals only) | KPI numerals (sketch `.kpi .val`, amended 26px→28px) and pagehead h1 (`--text-2xl`) |
 
-Buttons render at 14px/600; the primary armed confirm button inherits house primary styling. Rail-card titles are 14px/700 (sketch `.railcard h3`) with a bottom border separator.
+Buttons render at 14px/600; the primary armed confirm button inherits house primary styling. Rail-card titles are 14px/600 (sketch `.railcard h3`, weight amended) with a bottom border separator.
+
+Production reconciliation: shipped house chips (`web/src/features/runs/chips.tsx`) render 12px/`font-medium` (500); cockpit chip instances use `font-semibold` (600) per this contract — the 500→600 delta is absorbed by this amendment, house chip migration stays out of phase scope.
 
 ---
 
@@ -188,7 +189,7 @@ One house-built component mounted three ways this phase: cockpit pagehead (prima
 ### D. Webhook simulate card (ACTN-01) — right rail
 
 - App `Select` + payload-shape `Select` — one option per real ingest event kind the ingest seam accepts (enumerate from `ingest.HandleEvent` at implementation; each option label is the event name, description one line in the option's supporting text). No free-form payload editor this phase; no secret fields ever — HMAC signing and secret resolution are server-side only (secrets never reach the browser).
-- **Simulate** button — single click, no arm-confirm (non-destructive debug control); disabled with the paused/budget error-state copy when blocked.
+- **Simulate webhook** button — single click, no arm-confirm (non-destructive debug control); disabled with the paused/budget error-state copy when blocked.
 - Result block (request/response, no polling): ingest-outcome line per the copy contract; on acceptance a "open run #{id}" link to Run Detail. Outcome vocabulary mirrors the ingest seam's real outcomes (accepted / rejected / duplicate).
 
 ---
