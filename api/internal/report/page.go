@@ -49,6 +49,9 @@ type runDTO struct {
 	HeadBranch    *string    `json:"head_branch"`
 	Environment   string     `json:"environment"`
 	TriggerSource string     `json:"trigger_source"`
+	// TriggeredBy is the manual-trigger operator attribution (AUDT-01);
+	// null for webhook/reconcile/sweep runs.
+	TriggeredBy   *string    `json:"triggered_by"`
 	Status        string     `json:"status"`
 	Verdict       *string    `json:"verdict"`
 	PRNumber      *int32     `json:"pr_number"`
@@ -291,6 +294,7 @@ func wireRun(r *runs.Run) runDTO {
 		HeadSHA:       r.HeadSHA,
 		Environment:   r.Environment,
 		TriggerSource: wireTriggerSource(r.TriggerSource),
+		TriggeredBy:   textPtr(r.TriggeredBy),
 		Status:        wireStatus(r.Status),
 		Verdict:       wireVerdict(r.Verdict),
 		PRState:       wireUpperPtr(r.PRState),

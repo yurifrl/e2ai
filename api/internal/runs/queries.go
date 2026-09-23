@@ -20,6 +20,9 @@ type Run struct {
 	HeadBranch    pgtype.Text
 	Environment   string
 	TriggerSource string
+	// TriggeredBy is the operator attribution stamped on runs born outside
+	// the deploy path (0010, AUDT-01); NULL for webhook/reconcile/sweep runs.
+	TriggeredBy pgtype.Text
 	Status        Status
 	Verdict       pgtype.Text
 	PRNumber      pgtype.Int4
@@ -41,14 +44,14 @@ type Run struct {
 
 const runColumns = `
 	id, app_id, workflow_run_id, run_number, head_sha, head_branch, environment,
-	trigger_source, status, verdict, pr_number, pr_state,
+	trigger_source, triggered_by, status, verdict, pr_number, pr_state,
 	total_tests, passed, failed, flaky, skipped, duration_ms,
 	report_url, comment_url, check_run_id, error_note, started_at, finished_at, created_at`
 
 func scanRun(row pgx.Row) (*Run, error) {
 	var r Run
 	err := row.Scan(&r.ID, &r.AppID, &r.WorkflowRunID, &r.RunNumber, &r.HeadSHA, &r.HeadBranch,
-		&r.Environment, &r.TriggerSource, &r.Status, &r.Verdict, &r.PRNumber, &r.PRState,
+		&r.Environment, &r.TriggerSource, &r.TriggeredBy, &r.Status, &r.Verdict, &r.PRNumber, &r.PRState,
 		&r.TotalTests, &r.Passed, &r.Failed, &r.Flaky, &r.Skipped, &r.DurationMS,
 		&r.ReportURL, &r.CommentURL, &r.CheckRunID, &r.ErrorNote, &r.StartedAt, &r.FinishedAt, &r.CreatedAt)
 	if errors.Is(err, pgx.ErrNoRows) {
