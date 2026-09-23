@@ -41,6 +41,26 @@
   },
   "commands": [
     {
+      "id": "cockpit",
+      "title": {
+        "en-US": "Command Center",
+        "pt-BR": "Centro de Comando",
+        "es": "Centro de Mando",
+        "ro": "Centru de Comandă"
+      },
+      "route": "/e2ai",
+      "icon": "layout-dashboard",
+      "section": "operations",
+      "keywords": [
+        "cockpit",
+        "command center",
+        "live",
+        "feed",
+        "trigger",
+        "pause"
+      ]
+    },
+    {
       "id": "runs",
       "title": {
         "en-US": "Runs",
@@ -172,6 +192,9 @@
   "permissions": {
     "view": [
       "admin.e2ai.view"
+    ],
+    "edit": [
+      "admin.e2ai.edit"
     ]
   },
   "owners": {
