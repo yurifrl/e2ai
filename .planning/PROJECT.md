@@ -69,6 +69,7 @@ An arm of testers always reporting live, never blocking: every deploy produces r
 ## Constraints
 
 - **Tech stack**: Shared admin conventions — React + RTK feature slices (web), hexagonal Go domains (api), Postgres, Connect-RPC, Tilt/K8s — the module must register in the shared admin shell like its siblings.
+- **Stack reality (v1.1 decision, 2026-09-22)**: This module deviates from the family's named stack — there is NO RTK and NO Connect-RPC here. Reality: net/http REST handlers (api) + React 18 + admin-sdk + fetch with the house `usePolling` pattern and a locked `web/src/lib/types.ts` contract. v1.1 continues on this stack; do not plan RTK/Connect-RPC phases. (Research: STACK.md, ARCHITECTURE.md.)
 - **Governance**: New/changed plans require human approval; only approved plans execute unattended on deploys.
 - **Non-blocking**: The arm never gates merges, deploys, or CI; it reports only.
 - **Model access**: All LLM traffic via the company AI gateway.
