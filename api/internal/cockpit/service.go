@@ -7,6 +7,7 @@ package cockpit
 import (
 	"log/slog"
 
+	"github.com/NSXBet/e2ai/api/internal/platform/river"
 	"github.com/jackc/pgx/v5/pgxpool"
 )
 
@@ -20,10 +21,24 @@ type Service struct {
 	// boundary — the approvals pattern (approvals/http.go:128).
 	FallbackUser string
 
+	// Queue enqueues the runner-queue execute job inside the trigger
+	// transaction (06-02). Inert (and triggers refused) when nil.
+	Queue *river.Client
+
+	// Heads resolves default-branch head SHAs for the retest mode (TRIG-04).
+	// Nil (or GitHub-degraded) → retest refuses fail-closed at trigger time.
+	Heads HeadResolver
+
 	Logger *slog.Logger
 }
 
 // NewService builds the cockpit surface over the shared postgres pool.
-func NewService(pool *pgxpool.Pool, fallbackUser string, logger *slog.Logger) *Service {
-	return &Service{Pool: pool, FallbackUser: fallbackUser, Logger: logger}
+func NewService(pool *pgxpool.Pool, fallbackUser string, logger *slog.Logger, queue *river.Client, heads HeadResolver) *Service {
+	return &Service{
+		Pool:         pool,
+		FallbackUser: fallbackUser,
+		Queue:        queue,
+		Heads:        heads,
+		Logger:       logger,
+	}
 }

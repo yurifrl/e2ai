@@ -29,6 +29,7 @@ func (s *Service) Mount(mux *http.ServeMux) {
 	mux.HandleFunc("GET /api/cockpit/state", s.State)
 	mux.HandleFunc("POST /api/cockpit/pause", s.Pause)
 	mux.HandleFunc("POST /api/cockpit/unpause", s.Unpause)
+	mux.HandleFunc("POST /api/cockpit/triggers", s.TriggerHTTP)
 }
 
 // State serves the arm-state read model (view permission).

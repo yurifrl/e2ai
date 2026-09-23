@@ -293,7 +293,8 @@ func run() error {
 	// degraded posture — unmounted when postgres is down.
 	var cockpitSurface *cockpit.Service
 	if pool != nil {
-		cockpitSurface = cockpit.NewService(pool.Pool, cfg.DevFallbackUser, logger)
+		cockpitSurface = cockpit.NewService(pool.Pool, cfg.DevFallbackUser, logger, riverClient,
+			cockpit.GitHubHeads{Client: ghClient})
 	}
 
 	handler := httpx.IdentityWithConfig(

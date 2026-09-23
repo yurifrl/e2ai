@@ -523,3 +523,35 @@ func (c *Client) ListPRFiles(ctx context.Context, owner, repo string, number int
 		}
 	}
 }
+
+// repoMeta is the subset of GET /repos/{owner}/{repo} the trigger path needs.
+type repoMeta struct {
+	DefaultBranch string `json:"default_branch"`
+}
+
+// DefaultBranchHead resolves the repo's current default-branch head SHA in
+// two read-only GETs (repo meta for the branch name, then the branch tip).
+// The manual trigger's retest mode (phase 6 plan 02, TRIG-04) is the only
+// caller today: it must run against the live head, never a stored run's SHA.
+// GET /repos/{owner}/{repo}
+// GET /repos/{owner}/{repo}/commits/{branch}
+func (c *Client) DefaultBranchHead(ctx context.Context, owner, repo string) (string, error) {
+	var meta repoMeta
+	if err := c.do(ctx, http.MethodGet, fmt.Sprintf("repos/%s/%s", owner, repo), nil, &meta); err != nil {
+		return "", err
+	}
+	if meta.DefaultBranch == "" {
+		return "", fmt.Errorf("github: repo %s/%s reported an empty default branch", owner, repo)
+	}
+	var head struct {
+		SHA string `json:"sha"`
+	}
+	endpoint := fmt.Sprintf("repos/%s/%s/commits/%s", owner, repo, url.PathEscape(meta.DefaultBranch))
+	if err := c.do(ctx, http.MethodGet, endpoint, nil, &head); err != nil {
+		return "", err
+	}
+	if head.SHA == "" {
+		return "", fmt.Errorf("github: branch %s of %s/%s returned an empty head SHA", meta.DefaultBranch, owner, repo)
+	}
+	return head.SHA, nil
+}
