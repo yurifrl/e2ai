@@ -227,6 +227,19 @@
     "cockpit.rail.stuck": "STUCK",
     "cockpit.rail.role.navigator": "Navigator",
     "cockpit.rail.role.judge": "Vision Judge",
-    "cockpit.rail.role.analyst": "Flakiness Analyst"
+    "cockpit.rail.role.analyst": "Flakiness Analyst",
+    "cockpit.page.title": "Command Center",
+    "cockpit.page.subline": "The QA arm, always reporting. Never blocking.",
+    "cockpit.feed.title": "Live feed",
+    "cockpit.feed.allApps": "All apps",
+    "cockpit.feed.loadError": "Could not load the feed.",
+    "cockpit.feed.empty": "No activity yet.",
+    "cockpit.feed.emptyBody": "Runs, agent sessions and alerts stream here as they happen.",
+    "cockpit.feed.announce": "{{count}} feed entries loaded.",
+    "cockpit.feed.runDetail": "Run detail",
+    "cockpit.feed.viewTrends": "View trends",
+    "cockpit.feed.detailLabel": "Entry details",
+    "cockpit.feed.alertChip": "ALERT",
+    "cockpit.feed.sessionChip": "SESSION"
   }
 }

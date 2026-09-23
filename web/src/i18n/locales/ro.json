@@ -227,6 +227,19 @@
     "cockpit.rail.stuck": "BLOCAT",
     "cockpit.rail.role.navigator": "Navigator",
     "cockpit.rail.role.judge": "Vision Judge",
-    "cockpit.rail.role.analyst": "Flakiness Analyst"
+    "cockpit.rail.role.analyst": "Flakiness Analyst",
+    "cockpit.page.title": "Centru de Comandă",
+    "cockpit.page.subline": "Brațul QA, mereu raportând. Niciodată blocant.",
+    "cockpit.feed.title": "Activitate",
+    "cockpit.feed.allApps": "Toate aplicațiile",
+    "cockpit.feed.loadError": "Nu s-a putut încărca activitatea.",
+    "cockpit.feed.empty": "Nicio activitate deocamdată.",
+    "cockpit.feed.emptyBody": "Rulările, sesiunile de agenți și alertele apar aici în timp real.",
+    "cockpit.feed.announce": "{{count}} intrări încărcate.",
+    "cockpit.feed.runDetail": "Detalii rulare",
+    "cockpit.feed.viewTrends": "Vezi tendințele",
+    "cockpit.feed.detailLabel": "Detalii intrare",
+    "cockpit.feed.alertChip": "ALERTĂ",
+    "cockpit.feed.sessionChip": "SESIUNE"
   }
 }

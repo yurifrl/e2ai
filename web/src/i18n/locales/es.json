@@ -227,6 +227,19 @@
     "cockpit.rail.stuck": "ATASCADO",
     "cockpit.rail.role.navigator": "Navigator",
     "cockpit.rail.role.judge": "Vision Judge",
-    "cockpit.rail.role.analyst": "Flakiness Analyst"
+    "cockpit.rail.role.analyst": "Flakiness Analyst",
+    "cockpit.page.title": "Centro de Mando",
+    "cockpit.page.subline": "El brazo de QA, siempre informando. Nunca bloqueando.",
+    "cockpit.feed.title": "Novedades",
+    "cockpit.feed.allApps": "Todas las apps",
+    "cockpit.feed.loadError": "No se pudo cargar la novedades.",
+    "cockpit.feed.empty": "Sin actividad todavía.",
+    "cockpit.feed.emptyBody": "Las ejecuciones, sesiones de agentes y alertas llegan aquí en vivo.",
+    "cockpit.feed.announce": "{{count}} entradas cargadas.",
+    "cockpit.feed.runDetail": "Detalle de la ejecución",
+    "cockpit.feed.viewTrends": "Ver tendencias",
+    "cockpit.feed.detailLabel": "Detalles de la entrada",
+    "cockpit.feed.alertChip": "ALERTA",
+    "cockpit.feed.sessionChip": "SESIÓN"
   }
 }

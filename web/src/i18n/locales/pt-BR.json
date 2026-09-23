@@ -227,6 +227,19 @@
     "cockpit.rail.stuck": "TRAVADO",
     "cockpit.rail.role.navigator": "Navigator",
     "cockpit.rail.role.judge": "Vision Judge",
-    "cockpit.rail.role.analyst": "Flakiness Analyst"
+    "cockpit.rail.role.analyst": "Flakiness Analyst",
+    "cockpit.page.title": "Central de Comando",
+    "cockpit.page.subline": "O braço de QA, sempre reportando. Nunca bloqueando.",
+    "cockpit.feed.title": "Atividades",
+    "cockpit.feed.allApps": "Todos os apps",
+    "cockpit.feed.loadError": "Não foi possível carregar as atividades.",
+    "cockpit.feed.empty": "Sem atividade ainda.",
+    "cockpit.feed.emptyBody": "Execuções, sessões de agentes e alertas chegam aqui em tempo real.",
+    "cockpit.feed.announce": "{{count}} entradas carregadas.",
+    "cockpit.feed.runDetail": "Detalhe da execução",
+    "cockpit.feed.viewTrends": "Ver tendências",
+    "cockpit.feed.detailLabel": "Detalhes da entrada",
+    "cockpit.feed.alertChip": "ALERTA",
+    "cockpit.feed.sessionChip": "SESSÃO"
   }
 }
