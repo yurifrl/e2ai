@@ -211,6 +211,22 @@
     "cockpit.banner.paused": "El brazo se pausó.",
     "cockpit.banner.pausedReason": "El brazo se pausó — {{reason}}.",
     "cockpit.banner.pausedBy": "Pausado por {{operator}} · {{timestamp}}",
-    "cockpit.state.loadError": "No se pudo cargar el estado del brazo."
+    "cockpit.state.loadError": "No se pudo cargar el estado del brazo.",
+    "cockpit.kpi.kpisLoadError": "No se pudieron cargar los KPI.",
+    "cockpit.kpi.runsToday": "Ejecuciones de hoy",
+    "cockpit.kpi.passRate": "Tasa de éxito de hoy",
+    "cockpit.kpi.pendingApprovals": "Aprobaciones pendientes",
+    "cockpit.kpi.budget": "Presupuesto",
+    "cockpit.kpi.budgetSpendCap": "{{spend}} / {{cap}}",
+    "cockpit.kpi.budgetNoCap": "Sin tope — {{count}} apps sin límite",
+    "cockpit.kpi.budgetUncappedNote": "{{count}} apps no tienen tope; su gasto no está acotado.",
+    "cockpit.rail.title": "El brazo — agentes en línea",
+    "cockpit.rail.empty": "No hay agentes activos.",
+    "cockpit.rail.emptyBody": "Las sesiones de agente aparecen aquí mientras una ejecución está en curso.",
+    "cockpit.rail.loadError": "No se pudieron cargar las sesiones de agente.",
+    "cockpit.rail.stuck": "ATASCADO",
+    "cockpit.rail.role.navigator": "Navigator",
+    "cockpit.rail.role.judge": "Vision Judge",
+    "cockpit.rail.role.analyst": "Flakiness Analyst"
   }
 }

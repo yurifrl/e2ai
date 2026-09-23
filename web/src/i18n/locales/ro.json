@@ -211,6 +211,22 @@
     "cockpit.banner.paused": "Brațul a intrat pe pauză.",
     "cockpit.banner.pausedReason": "Brațul a intrat pe pauză — {{reason}}.",
     "cockpit.banner.pausedBy": "Pauză de {{operator}} · {{timestamp}}",
-    "cockpit.state.loadError": "Nu s-a putut încărca starea brațului."
+    "cockpit.state.loadError": "Nu s-a putut încărca starea brațului.",
+    "cockpit.kpi.kpisLoadError": "Nu s-au putut încărca KPI-urile.",
+    "cockpit.kpi.runsToday": "Rulări de azi",
+    "cockpit.kpi.passRate": "Rata de succes de azi",
+    "cockpit.kpi.pendingApprovals": "Aprobări în așteptare",
+    "cockpit.kpi.budget": "Buget",
+    "cockpit.kpi.budgetSpendCap": "{{spend}} / {{cap}}",
+    "cockpit.kpi.budgetNoCap": "Fără plafon — {{count}} aplicații fără limită",
+    "cockpit.kpi.budgetUncappedNote": "{{count}} aplicații nu au plafon; cheltuiala lor este nelimitată.",
+    "cockpit.rail.title": "Brațul — agenți activi",
+    "cockpit.rail.empty": "Niciun agent activ.",
+    "cockpit.rail.emptyBody": "Sesiunile agenților apar aici cât timp o rulare este în desfășurare.",
+    "cockpit.rail.loadError": "Nu s-au putut încărca sesiunile agenților.",
+    "cockpit.rail.stuck": "BLOCAT",
+    "cockpit.rail.role.navigator": "Navigator",
+    "cockpit.rail.role.judge": "Vision Judge",
+    "cockpit.rail.role.analyst": "Flakiness Analyst"
   }
 }

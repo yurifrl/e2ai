@@ -2,9 +2,9 @@
  * Cockpit KPI header zone (COCK-04): the arm-state card — LIVE/PAUSED badge
  * at all times plus the attributed pause/unpause control — and the
  * full-width paused banner strip that derives from the same CockpitState
- * poll (no second fetch). The remaining KPI cards (runs today, pass rate,
- * budget, approvals) mount in Plan 04 once their endpoints exist; this task
- * ships the shell + pause control only.
+ * poll (no second fetch), plus the four Plan 04 data cards (runs today,
+ * pass rate, budget, pending approvals). KPI data polls via the Command
+ * Center page and arrives as props.
  *
  * Mutation contract (ACTN-06): server-ack wait, never optimistic — the
  * button spins until the API answers and the fresh row re-renders; API
@@ -14,9 +14,11 @@
  * 10s while visible (RunsListPage analog).
  */
 import { useState } from 'react'
+import { Link } from 'react-router-dom'
 import { useI18n } from '@nsxbet/admin-sdk'
 import { getCockpitState, pauseCockpit, unpauseCockpit } from '../../lib/api'
 import { ApiError } from '../../lib/api'
+import type { CockpitKpis } from '../../lib/types'
 import { usePolling } from '../../lib/usePolling'
 import { formatTimestamp } from '../runs/format'
 
@@ -25,7 +27,13 @@ const REFRESH_MS = 10_000
 // cap the input and keep the counter honest instead of provoking a 400.
 const REASON_MAX = 200
 
-export function KpiCards() {
+export function KpiCards({
+  kpis,
+  kpisError,
+}: {
+  kpis: CockpitKpis | null
+  kpisError: string | null
+}) {
   const { t } = useI18n('e2ai')
   const { data: state, error: loadError } = usePolling(getCockpitState, REFRESH_MS)
 
@@ -77,6 +85,10 @@ export function KpiCards() {
             </span>
           ) : null}
         </div>
+      ) : null}
+
+      {kpisError && kpis == null ? (
+        <p className="text-sm text-destructive">{t('cockpit.kpi.kpisLoadError')}</p>
       ) : null}
 
       <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-5">
@@ -172,8 +184,94 @@ export function KpiCards() {
           ) : null}
         </div>
 
-        {/* Plan 04 mounts runs-today / pass-rate / budget / approvals cards here. */}
+        {/* Runs today — numeral only (the locked wire carries no yesterday
+            aggregate, so the sketch's "vs yesterday" delta line is omitted). */}
+        <div className="rounded border bg-card p-4">
+          <h3 className="text-sm font-medium text-muted-foreground">
+            {t('cockpit.kpi.runsToday')}
+          </h3>
+          <div className="mt-1 text-2xl font-semibold tabular-nums">
+            {kpis ? kpis.runs_today : '—'}
+          </div>
+        </div>
+
+        {/* Pass rate over completed runs — house verdict colors (pass = emerald). */}
+        <div className="rounded border bg-card p-4">
+          <h3 className="text-sm font-medium text-muted-foreground">{t('cockpit.kpi.passRate')}</h3>
+          <div
+            className={`mt-1 text-2xl font-semibold tabular-nums ${
+              kpis && kpis.pass_rate_today >= 0.8
+                ? 'text-emerald-600 dark:text-emerald-400'
+                : kpis && kpis.pass_rate_today > 0
+                  ? 'text-amber-600 dark:text-amber-400'
+                  : ''
+            }`}
+          >
+            {kpis ? <>{Math.round(kpis.pass_rate_today * 100)}<span className="text-sm">%</span></> : '—'}
+          </div>
+        </div>
+
+        {/* Pending approvals — the whole card links to the queue; warning
+            tone while anything is pending. */}
+        <Link
+          to="/e2ai/approvals"
+          className={`block rounded border p-4 hover:bg-muted ${
+            kpis && kpis.pending_approvals > 0
+              ? 'border-amber-300 bg-amber-50 text-amber-900 dark:border-amber-700 dark:bg-amber-950 dark:text-amber-200'
+              : 'bg-card'
+          }`}
+        >
+          <h3 className="text-sm font-medium text-muted-foreground">
+            {t('cockpit.kpi.pendingApprovals')}
+          </h3>
+          <div className="mt-1 text-2xl font-semibold tabular-nums">
+            {kpis ? kpis.pending_approvals : '—'}
+          </div>
+        </Link>
+
+        {/* Budget — spend against the sum of resolved caps; uncapped apps
+            surface as a count, and "no cap" is explicit, never a fabricated
+            zero ceiling (CONTEXT decision 1). Warning tone ≥80% utilization. */}
+        <div
+          className={`rounded border bg-card p-4 ${
+            kpis && kpis.budget.caps_sum > 0 && kpis.budget.spent_today >= kpis.budget.caps_sum
+              ? 'border-red-300 dark:border-red-700'
+              : kpis &&
+                  kpis.budget.caps_sum > 0 &&
+                  kpis.budget.spent_today / kpis.budget.caps_sum >= 0.8
+                ? 'border-amber-300 dark:border-amber-700'
+                : ''
+          }`}
+        >
+          <h3 className="text-sm font-medium text-muted-foreground">{t('cockpit.kpi.budget')}</h3>
+          <div className="mt-1 font-mono text-lg font-semibold tabular-nums">
+            {kpis ? (
+              kpis.budget.caps_sum > 0 ? (
+                t('cockpit.kpi.budgetSpendCap', {
+                  spend: formatMillicents(kpis.budget.spent_today),
+                  cap: formatMillicents(kpis.budget.caps_sum),
+                })
+              ) : (
+                <span className={kpis.budget.uncapped_count > 0 ? 'text-amber-600 dark:text-amber-400' : ''}>
+                  {t('cockpit.kpi.budgetNoCap', { count: kpis.budget.uncapped_count })}
+                </span>
+              )
+            ) : (
+              '—'
+            )}
+          </div>
+          {kpis && kpis.budget.caps_sum > 0 && kpis.budget.uncapped_count > 0 ? (
+            <p className="mt-1 text-xs text-muted-foreground">
+              {t('cockpit.kpi.budgetUncappedNote', { count: kpis.budget.uncapped_count })}
+            </p>
+          ) : null}
+        </div>
       </div>
     </section>
   )
+}
+
+/** Budgets accumulate in millicents; surface them as dollars+cents. */
+function formatMillicents(millicents: number): string {
+  return `$${(millicents / 100_000).toFixed(4)}`
 }

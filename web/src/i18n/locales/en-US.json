@@ -211,6 +211,22 @@
     "cockpit.banner.paused": "The arm paused.",
     "cockpit.banner.pausedReason": "The arm paused — {{reason}}.",
     "cockpit.banner.pausedBy": "Paused by {{operator}} · {{timestamp}}",
-    "cockpit.state.loadError": "Could not load arm state."
+    "cockpit.state.loadError": "Could not load arm state.",
+    "cockpit.kpi.kpisLoadError": "Could not load KPIs.",
+    "cockpit.kpi.runsToday": "Runs today",
+    "cockpit.kpi.passRate": "Pass rate today",
+    "cockpit.kpi.pendingApprovals": "Pending approvals",
+    "cockpit.kpi.budget": "Budget",
+    "cockpit.kpi.budgetSpendCap": "{{spend}} / {{cap}}",
+    "cockpit.kpi.budgetNoCap": "No cap — {{count}} apps uncapped",
+    "cockpit.kpi.budgetUncappedNote": "{{count}} apps have no cap; their spend is unbounded.",
+    "cockpit.rail.title": "The Arm — agents online",
+    "cockpit.rail.empty": "No agents active.",
+    "cockpit.rail.emptyBody": "Agent sessions appear here while a run is in flight.",
+    "cockpit.rail.loadError": "Could not load agent sessions.",
+    "cockpit.rail.stuck": "STUCK",
+    "cockpit.rail.role.navigator": "Navigator",
+    "cockpit.rail.role.judge": "Vision Judge",
+    "cockpit.rail.role.analyst": "Flakiness Analyst"
   }
 }
