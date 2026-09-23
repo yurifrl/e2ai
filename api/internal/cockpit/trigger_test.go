@@ -12,6 +12,8 @@ import (
 	"sync"
 	"testing"
 
+	"github.com/NSXBet/e2ai/api/internal/app"
+	"github.com/NSXBet/e2ai/api/internal/ingest"
 	platriver "github.com/NSXBet/e2ai/api/internal/platform/river"
 	"github.com/NSXBet/e2ai/api/internal/suite"
 	"github.com/google/uuid"
@@ -51,13 +53,19 @@ func TestTriggerRequestValidation(t *testing.T) {
 func triggerService(t *testing.T) *Service {
 	t.Helper()
 	pool := testPool(t)
+	// The trigger path enqueues ExecuteArgs onto river_job inside its
+	// transaction, so the River schema must exist (MigrateRiver is
+	// idempotent) — same setup convention as ingest's gateWorker.
+	if err := app.MigrateRiver(context.Background(), pool); err != nil {
+		t.Fatalf("river migrate: %v", err)
+	}
 	workers := river.NewWorkers()
 	river.AddWorker[suite.ExecuteArgs](workers, noopExecuteWorker{})
 	client, err := platriver.RunnerClient(pool, 1, platriver.WithWorkers(workers))
 	if err != nil {
 		t.Fatalf("river test client: %v", err)
 	}
-	return NewService(pool, "", nil, client, nil)
+	return NewService(pool, "", nil, client, nil, ingest.NewStore(pool), nil)
 }
 
 func TestTriggerZeroCeilingRefuses(t *testing.T) {
