@@ -172,7 +172,14 @@
 
 **Depends on:** v1.0 (deploy ingest seam, runs, verdicts, reports, approvals — the cockpit actuates the shipped pipeline; no v1.1 phase can precede it)
 **Guardrails:** Report-only invariant — trigger/simulate/pause actuate the arm, never the app under test. Ceiling-0 rejected at the trigger boundary (engine sentinel semantics unchanged). Spawn gates accept the pinned hash; no re-resolving "current approved" for pinned runs. No auto-approval — the Approvals queue stays the only approval path.
-**Plans**: TBD
+
+**Plans**: 5 plans (waves 1→5, serial — shared files and trigger-service reuse)
+
+- [ ] 06-01-PLAN.md — Shared substrate: migration 0010 (trigger_source widen, audit_events, cockpit_state, budget cap, runs.triggered_by, manual-id sequence), audit writer, pause state + KPI pause endpoint, budget gate domain
+- [ ] 06-02-PLAN.md — Manual trigger backend: atomic trigger tx (gates → insert → plan pin → audit → enqueue), approved-only picker data, pre-flight budget + plan identity, reproduce/retest semantics, spawn-gate pin acceptance, sticky-comment trigger_source gate
+- [ ] 06-03-PLAN.md — Webhook simulate + feed/KPIs backend: server-side render + HMAC sign against own ingest seam, ingest outcome + created-run link, live feed + KPI aggregates + agent rail with stuck flags
+- [ ] 06-04-PLAN.md — Command Center web read surface: route + CommandCenterPage, KpiCards, live feed panel, agent rail (view-only, polling)
+- [ ] 06-05-PLAN.md — Action surfaces + cutover: TriggerPanel, SimulateCard, route swap to Command Center root, dev-auth editor path fix, i18n four locales, re-run actions on Run Detail
 **UI hint**: yes
 
 ### Phase 7: Webhook Inbox

@@ -1,0 +1,1 @@
+No external API integration: the phase's webhook simulate renders and HMAC-signs payloads server-side against the app's own ingest seam (`ingest.Store.Ingest`); all `api`/`endpoint`/`webhook` terms in the scope refer to internal cockpit BFF routes and the existing v1.0 GitHub ingest, not a new external integration.
