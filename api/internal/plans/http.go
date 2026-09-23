@@ -43,6 +43,10 @@ func NewPlansHTTP(pool *pgxpool.Pool, client *github.Client) *PlansHTTP {
 type planDTO struct {
 	ID              string    `json:"id"`
 	App             string    `json:"app"`
+	// AppID is the registered-app UUID (Phase 06): the trigger panel on the
+	// plan detail page needs it to POST /api/cockpit/triggers. Empty while
+	// the row's app_id is NULL.
+	AppID           string    `json:"app_id,omitempty"`
 	Title           string    `json:"title"`
 	Surfaces        []string  `json:"surfaces"`
 	// Surface is the plan's target surface (Phase 4). Locked vocabulary with
@@ -185,6 +189,7 @@ func wirePlan(r planRow) planDTO {
 	dto := planDTO{
 		ID:              r.ID,
 		App:             r.App,
+		AppID:           r.AppID.String(),
 		Surfaces:        r.Surfaces,
 		Status:          r.Status,
 		SourcePath:      r.SrcPath,
