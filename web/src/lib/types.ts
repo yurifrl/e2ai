@@ -39,7 +39,7 @@ export interface Run {
   head_sha: string
   head_branch: string | null
   environment: string
-  trigger_source: 'WEBHOOK' | 'RECONCILE'
+  trigger_source: 'WEBHOOK' | 'RECONCILE' | 'SWEEP' | 'MANUAL' | 'SIMULATE'
   status: RunStatus
   verdict: Verdict | null
   pr_number: number | null
@@ -404,4 +404,18 @@ export interface TrendAlert {
 
 export interface TrendAlerts {
   alerts: TrendAlert[]
+}
+
+/* ------------------------------------------------------------------ */
+/* Cockpit (Phase 6; locked verbatim to api/internal/cockpit/http.go). */
+/* Arm state of record — the single-row cockpit_state read model.      */
+/* Timestamps RFC3339Nano; nullable fields are null while unpaused.    */
+/* ------------------------------------------------------------------ */
+
+export interface CockpitState {
+  paused: boolean
+  paused_reason: string | null
+  paused_by: string | null
+  paused_at: string | null
+  updated_at: string
 }

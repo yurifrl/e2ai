@@ -196,6 +196,21 @@
     "corpusHealth.staleTitle": "Comportamente învechite",
     "corpusHealth.queueTitle": "Coadă de promovare",
     "corpusHealth.openCorpus": "Deschide corpusul",
-    "corpusHealth.noQueue": "Nicio învățătură în așteptarea promovării."
+    "corpusHealth.noQueue": "Nicio învățătură în așteptarea promovării.",
+    "cockpit.kpi.zone": "KPI cockpit",
+    "cockpit.arm.title": "Starea brațului",
+    "cockpit.arm.live": "LIVE",
+    "cockpit.arm.paused": "PE PAUZĂ",
+    "cockpit.pause.pause": "Pune brațul pe pauză",
+    "cockpit.pause.confirm": "Confirmă pauza",
+    "cockpit.pause.consequence": "Declanșările și simulările sunt blocate până când reiei.",
+    "cockpit.pause.reasonPlaceholder": "De ce pui brațul pe pauză?",
+    "cockpit.pause.cancel": "Anulare",
+    "cockpit.pause.resume": "Reia brațul",
+    "cockpit.pause.waiting": "Se așteaptă…",
+    "cockpit.banner.paused": "Brațul a intrat pe pauză.",
+    "cockpit.banner.pausedReason": "Brațul a intrat pe pauză — {{reason}}.",
+    "cockpit.banner.pausedBy": "Pauză de {{operator}} · {{timestamp}}",
+    "cockpit.state.loadError": "Nu s-a putut încărca starea brațului."
   }
 }

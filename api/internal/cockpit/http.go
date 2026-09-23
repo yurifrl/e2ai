@@ -96,7 +96,16 @@ func (s *Service) mutate(w http.ResponseWriter, r *http.Request, paused bool) {
 		writeErr(w, http.StatusInternalServerError, "mutation failed")
 		return
 	}
-	w.WriteHeader(http.StatusNoContent)
+	// 200 + the fresh arm state: the pause card re-renders from the ack
+	// (server-ack wait, no optimistic UI) — mirrors the quarantine surface's
+	// mutations-return-a-body convention, never a bare 204.
+	st, err := Read(r.Context(), s.Pool)
+	if err != nil {
+		s.Logger.Error("cockpit state read failed", "error", err)
+		writeErr(w, http.StatusInternalServerError, "state read failed")
+		return
+	}
+	writeWire(w, http.StatusOK, stateDTO(st))
 }
 
 // gate mirrors the approvals surface: view for reads, edit for mutations. A

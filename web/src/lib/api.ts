@@ -8,6 +8,10 @@
  *   GET /api/runs/{id}/report         → ReportData
  *   GET /artifacts/{path...}          → raw artifact bytes
  *
+ *   GET /api/cockpit/state            → CockpitState (arm state of record)
+ *   POST /api/cockpit/pause           → CockpitState (200 after commit; 403/400)
+ *   POST /api/cockpit/unpause         → CockpitState (same contract)
+ *
  * Non-2xx responses throw a typed ApiError carrying the body's error field.
  */
 import { authenticatedFetch } from '../shared/authenticatedFetch'
@@ -34,6 +38,7 @@ import type {
   History,
   RunCost,
   TrendAlerts,
+  CockpitState,
 } from './types'
 
 export class ApiError extends Error {
@@ -216,4 +221,22 @@ export function getAlerts(appId: string, unacknowledgedOnly = true): Promise<Tre
 
 export function acknowledgeAlert(id: string): Promise<{ acknowledged: boolean }> {
   return postJson(`/api/trends/alerts/${encodeURIComponent(id)}/acknowledge`, {})
+}
+
+/* Cockpit arm state (COCK-04): the pause control reads this row and both
+ * mutations answer with the fresh state, so the button spins until the API
+ * answers and the card re-renders from the ack — never optimistic. The
+ * pause body is {reason}; the route itself picks the direction (locked to
+ * api/internal/cockpit/http.go).
+ */
+export function getCockpitState(): Promise<CockpitState> {
+  return getJson('/api/cockpit/state')
+}
+
+export function pauseCockpit(reason?: string): Promise<CockpitState> {
+  return postJson('/api/cockpit/pause', { reason })
+}
+
+export function unpauseCockpit(): Promise<CockpitState> {
+  return postJson('/api/cockpit/unpause', {})
 }

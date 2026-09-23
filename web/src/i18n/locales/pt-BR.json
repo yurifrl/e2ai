@@ -196,6 +196,21 @@
     "corpusHealth.staleTitle": "Comportamentos desatualizados",
     "corpusHealth.queueTitle": "Fila de promoção",
     "corpusHealth.openCorpus": "Abrir corpus",
-    "corpusHealth.noQueue": "Nenhum aprendizado aguardando promoção."
+    "corpusHealth.noQueue": "Nenhum aprendizado aguardando promoção.",
+    "cockpit.kpi.zone": "KPIs do cockpit",
+    "cockpit.arm.title": "Estado do braço",
+    "cockpit.arm.live": "AO VIVO",
+    "cockpit.arm.paused": "PAUSADO",
+    "cockpit.pause.pause": "Pausar braço",
+    "cockpit.pause.confirm": "Confirmar pausa",
+    "cockpit.pause.consequence": "Disparos e simulações ficam bloqueados até você retomar.",
+    "cockpit.pause.reasonPlaceholder": "Por que pausar o braço?",
+    "cockpit.pause.cancel": "Cancelar",
+    "cockpit.pause.resume": "Retomar braço",
+    "cockpit.pause.waiting": "Aguardando…",
+    "cockpit.banner.paused": "O braço pausou.",
+    "cockpit.banner.pausedReason": "O braço pausou — {{reason}}.",
+    "cockpit.banner.pausedBy": "Pausado por {{operator}} · {{timestamp}}",
+    "cockpit.state.loadError": "Não foi possível carregar o estado do braço."
   }
 }

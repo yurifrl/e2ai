@@ -196,6 +196,21 @@
     "corpusHealth.staleTitle": "Stale behaviors",
     "corpusHealth.queueTitle": "Promotion queue",
     "corpusHealth.openCorpus": "Open corpus",
-    "corpusHealth.noQueue": "No learnings awaiting promotion."
+    "corpusHealth.noQueue": "No learnings awaiting promotion.",
+    "cockpit.kpi.zone": "Cockpit KPIs",
+    "cockpit.arm.title": "Arm state",
+    "cockpit.arm.live": "LIVE",
+    "cockpit.arm.paused": "PAUSED",
+    "cockpit.pause.pause": "Pause arm",
+    "cockpit.pause.confirm": "Confirm pause",
+    "cockpit.pause.consequence": "Triggers and simulates are blocked until you resume.",
+    "cockpit.pause.reasonPlaceholder": "Why are you pausing the arm?",
+    "cockpit.pause.cancel": "Cancel",
+    "cockpit.pause.resume": "Resume arm",
+    "cockpit.pause.waiting": "Waiting…",
+    "cockpit.banner.paused": "The arm paused.",
+    "cockpit.banner.pausedReason": "The arm paused — {{reason}}.",
+    "cockpit.banner.pausedBy": "Paused by {{operator}} · {{timestamp}}",
+    "cockpit.state.loadError": "Could not load arm state."
   }
 }
