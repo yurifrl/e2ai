@@ -31,7 +31,7 @@
 | 3. Agent roster and the agentic loop | v1.0 | — | Complete | 2026-09-22 |
 | 4. Mobile surfaces | v1.0 | — | Complete | 2026-09-22 |
 | 5. Flake governance, trends, and multi-app scale | v1.0 | — | Complete | 2026-09-22 |
-| 6. Cockpit trigger, Command Center, and webhook simulate | v1.1 | — | Not started | - |
+| 6. Cockpit trigger, Command Center, and webhook simulate | v1.1 | 1/5 | In Progress|  |
 | 7. Webhook Inbox | v1.1 | — | Not started | - |
 | 8. Outside-action consolidation | v1.1 | — | Not started | - |
 | 9. Apps registry completion and Jobs Observatory | v1.1 | — | Not started | - |
@@ -192,10 +192,10 @@
 **Depends on:** v1.0 (deploy ingest seam, runs, verdicts, reports, approvals — the cockpit actuates the shipped pipeline; no v1.1 phase can precede it)
 **Guardrails:** Report-only invariant — trigger/simulate/pause actuate the arm, never the app under test. Ceiling-0 rejected at the trigger boundary (engine sentinel semantics unchanged). Spawn gates accept the pinned hash; no re-resolving "current approved" for pinned runs. No auto-approval — the Approvals queue stays the only approval path.
 
-**Plans**: 5 plans (waves 1→5, serial — shared files and trigger-service reuse)
+**Plans**: 1/5 plans executed (waves 1→5, serial — shared files and trigger-service reuse)
 **Wave 1**
 
-- [ ] 06-01-PLAN.md — Shared substrate: migration 0010 (trigger_source widen, audit_events, cockpit_state, budget cap, runs.triggered_by, manual-id sequence), audit writer, pause state + KPI pause endpoint, budget gate domain
+- [x] 06-01-PLAN.md — Shared substrate: migration 0010 (trigger_source widen, audit_events, cockpit_state, budget cap, runs.triggered_by, manual-id sequence), audit writer, pause state + KPI pause endpoint, budget gate domain
 
 **Wave 2** *(blocked on Wave 1 completion)*
 

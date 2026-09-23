@@ -12,6 +12,7 @@ Requirements for initial release. Each maps to a roadmap phase (P1–P5 per rese
 - [x] **INTG-01** *(P1)*: Module skeleton registers into the shared admin shell via `admin.module.json` (id `@admin/e2ai`, routeBase `/e2ai`, nav sections, commands, permissions) following the incidents-admin family pattern
 - [x] **INTG-02** *(P1)*: Go hexagonal API + Postgres + River queue (Connect-RPC via BFF), local dev stack via Tilt with mock auth — matches shared-admin conventions
 - [x] **INTG-03** *(P1)*: Report page renders inside the admin shell with live run state (start from a run, watch it progress, land on the full report)
+
 ### App Registry
 
 - [x] **APPS-01** *(P1)*: Per-app config-as-code registration: repo, deploy workflow name, surfaces, environments, plans source, corpus root
@@ -23,10 +24,12 @@ Requirements for initial release. Each maps to a roadmap phase (P1–P5 per rese
 - [x] **INGE-01** *(P1)*: `workflow_run` deploy webhook ingest: HMAC validation, idempotent by delivery GUID + `repo/workflow/run_id`, 202-then-enqueue (no inline processing)
 - [x] **INGE-02** *(P1)*: Poll-based reconciliation sweep for missed/duplicate webhook deliveries (webhooks are not auto-redelivered)
 - [x] **INGE-03** *(P1)*: Deploy-completion ≠ live: rollout-health polling determines when QA actually starts against the deployed build
+
 ### Deterministic Suite (P1)
 
 - [x] **SUIT-01** *(P1)*: Seeded suite runs the existing bet-client Playwright specs on staging per deploy; run records consume Playwright blob/json + traces as evidence
 - [x] **SUIT-02** *(P1)*: Deterministic runs establish the baseline the agentic layer must later beat
+
 ### Verdicts & Reports
 
 - [x] **VERD-01** *(P1)*: Verdict engine with fixed taxonomy `PASS / FAIL / FLAKY / INFRA_ERROR / INCONCLUSIVE`; verdicts derive from evidence + run state, never exit codes alone
@@ -37,17 +40,20 @@ Requirements for initial release. Each maps to a roadmap phase (P1–P5 per rese
 - [x] **REPT-04** *(P3)*: Agentic run reports carry agent trajectory, per-step evidence citations, and verdicts that cite machine-checkable evidence or render `INCONCLUSIVE`
 
 - [x] **SECR-01** *(P1)*: Secrets hygiene: credentials kept out of screenshots, logs, fixture metadata, and reports
+
 ### Test Plans & Approvals
 
 - [x] **PLAN-01** *(P2)*: Declarative markdown plan format with frontmatter (app, surfaces, behaviors, assertions) — the format spec from sketch 006 is the contract
 - [x] **PLAN-02** *(P2)*: Plans sourced per-app via registry config: app repo path or central plans repo, both supported
 - [x] **APPR-01** *(P2)*: Approval queue: new and changed plans wait for human approval; only previously approved plans run unattended on deploys
 - [x] **APPR-02** *(P2)*: Approval UI = rendered plan + raw diff toggle (chosen design, sketch 003-B); approvals are attributable (who, when, which version)
+
 ### Test Derivation
 
 - [x] **DERV-01** *(P2)*: PR diff → affected-scope mapping → run plan (subset + prioritization of the deterministic suite)
 - [x] **DERV-02** *(P2)*: Plan Author agent drafts new intent-level checks from the diff; drafts queue for human approval before ever running
 - [x] **DERV-03** *(P2)*: Tautology guard: derived expected values come from independent sources (specs, tickets, recorded prior behavior) — never from re-reading the diff's own implementation
+
 ### Behavior Corpus
 
 - [x] **CORP-01** *(P2)*: Expected-behavior store seeded from existing Playwright specs — first cut of the verdict oracle
@@ -102,6 +108,7 @@ Requirements for initial release. Each maps to a roadmap phase (P1–P5 per rese
 | Flake Governance & Trends | FLAK-01..02, TREN-01, MCP-01, EDGE-01 | 5 |
 
 **Coverage:**
+
 - v1.0 requirements: 45 total
 - Mapped to phases: 45
 - Unmapped: 0 ✓
@@ -115,7 +122,7 @@ Defined 2026-09-22 from research (STACK/FEATURES/ARCHITECTURE/PITFALLS/SUMMARY).
 - [ ] **COCK-01** *(P6)*: Admin landing is the Command Center at the module root (sketch 001-A built for real): KPI header (runs today, pass rate today, pending approvals badge, budget spend vs cap, paused/kill-switch state), reverse-chron live feed, agent rail
 - [ ] **COCK-02** *(P6)*: Feed rows expand inline to a compact detail strip (verdict, duration, cost, evidence thumbnails); app filter chips constrain the feed; notable arm events (session failures, flakes quarantined, triage arrivals) appear as feed events
 - [ ] **COCK-03** *(P6)*: Agent rail shows live agent sessions (role, status, heartbeat age) with stuck sessions (>90s lapsed heartbeat, API-computed flag) flagged and linking to Run Detail
-- [ ] **COCK-04** *(P6)*: Global pause control lives in the KPI header: paused state blocks all new triggers with an explicit reason; current state visible at all times
+- [x] **COCK-04** *(P6)*: Global pause control lives in the KPI header: paused state blocks all new triggers with an explicit reason; current state visible at all times
 
 ### Manual Trigger
 
@@ -155,7 +162,7 @@ Defined 2026-09-22 from research (STACK/FEATURES/ARCHITECTURE/PITFALLS/SUMMARY).
 
 ### Audit & Budget Integrity
 
-- [ ] **AUDT-01** *(P6)*: Every cockpit mutation attributes operator identity + timestamp in the affected row/log so "who triggered/killed/replayed this" is answerable from the UI
+- [x] **AUDT-01** *(P6)*: Every cockpit mutation attributes operator identity + timestamp in the affected row/log so "who triggered/killed/replayed this" is answerable from the UI
 - [ ] **BUDG-03** *(P6)*: Trigger-time budget gate: validates both ceilings strictly positive (ceiling 0 is never unlimited), aggregates spend per app/day against caps, and serializes concurrent triggers per run (no double-paid sessions from the racy read-then-insert path)
 
 ### Out of Scope (v1.1 anti-features)

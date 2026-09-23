@@ -5,15 +5,16 @@ milestone_name: Admin Cockpit
 current_phase: 6
 current_phase_name: Cockpit trigger, Command Center, and webhook simulate
 status: planning
-last_updated: "2026-09-23T07:39:51.754Z"
+stopped_at: Completed 06-01-PLAN.md
+last_updated: "2026-09-23T09:15:32.017Z"
 last_activity: 2026-09-22
 last_activity_desc: v1.1 roadmap written (4 phases; v1.0 records preserved)
-state_head: 5ddca935d9aa6346caa322bf2212a68e90e1d489
+state_head: f22ff054b6bf1ee33b7986d3ba4ef0cb2932aaf3
 progress:
   total_phases: 4
   completed_phases: 0
   total_plans: 5
-  completed_plans: 0
+  completed_plans: 1
   percent: 0
 ---
 
@@ -38,3 +39,19 @@ Last activity: 2026-09-22 — v1.1 roadmap written (4 phases; v1.0 records prese
 - Phase 6 mints the shared substrate all later phases reuse: migration `0010_cockpit.sql`, trigger-time budget gate (pitfalls P1–P3), audit-attribution pattern (M4), permission wiring.
 - Flagged for Phase 9 planning (research gaps): registry source-of-truth (YAML vs DB canonical) and River cancel propagation (verify listener control-events or defer JobCancel).
 - STATE.md frontmatter (total_phases) is SDK-synced from state.json — phases register there during plan-phase; not hand-edited.
+
+## Performance Metrics
+
+| Plan | Duration | Tasks | Files |
+|------|----------|-------|-------|
+| Phase 06 P01 | 55m | 3 tasks | 14 files |
+
+## Decisions
+
+- [Phase 6]: Pause mutations answer 200 + fresh CockpitState; reason-only wire body; zero ceiling is a typed refusal (BUDG-03)
+
+## Session
+
+**Last session:** 2026-09-23T09:15:32.005Z
+**Stopped at:** Completed 06-01-PLAN.md
+**Resume file:** None
