@@ -419,3 +419,58 @@ export interface CockpitState {
   paused_at: string | null
   updated_at: string
 }
+
+/* Cockpit read models (Plans 03/04; locked verbatim to
+ * api/internal/cockpit/{feed,kpis,agents}.go). Timestamps RFC3339Nano;
+ * feed keyset cursor is opaque base64 and absent on the last page.      */
+
+export type CockpitFeedKind = 'run' | 'agent_session' | 'alert'
+
+export interface CockpitFeedEvent {
+  id: string
+  kind: CockpitFeedKind
+  created_at: string
+  app_id: string
+  run_id?: string
+  summary: string
+}
+
+export interface CockpitFeedPage {
+  entries: CockpitFeedEvent[]
+  cursor?: string
+}
+
+export interface CockpitBudgetHeader {
+  spent_today: number
+  caps_sum: number
+  uncapped_count: number
+}
+
+export interface CockpitKpis {
+  runs_today: number
+  pass_rate_today: number
+  budget: CockpitBudgetHeader
+  pending_approvals: number
+}
+
+export interface CockpitAgentSession {
+  run_id: string
+  role: string
+  status: string
+  heartbeat_age_seconds: number
+  stuck: boolean
+}
+
+/* Per-app layered budget block (gate's own verdict — one source of truth,
+ * not a recomputation; kpis.go PerAppBudget). */
+export interface CockpitBudget {
+  app_id: string
+  cap_kind: string
+  cap_millicents: number
+  capped: boolean
+  spent_today: number
+  remaining_millicents: number
+  remaining_capped: boolean
+  refused: boolean
+  reason?: string
+}

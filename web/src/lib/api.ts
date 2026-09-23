@@ -39,6 +39,10 @@ import type {
   RunCost,
   TrendAlerts,
   CockpitState,
+  CockpitAgentSession,
+  CockpitBudget,
+  CockpitFeedPage,
+  CockpitKpis,
 } from './types'
 
 export class ApiError extends Error {
@@ -239,4 +243,33 @@ export function pauseCockpit(reason?: string): Promise<CockpitState> {
 
 export function unpauseCockpit(): Promise<CockpitState> {
   return postJson('/api/cockpit/unpause', {})
+}
+
+/* Cockpit read models (Plan 03 endpoints, GET /api/cockpit/*). The app
+ * filter is the literal UUID of a registered app; feed pagination is the
+ * server's opaque keyset cursor. */
+
+export function getCockpitFeed(opts?: {
+  limit?: number
+  appId?: string
+  cursor?: string
+}): Promise<CockpitFeedPage> {
+  const params = new URLSearchParams()
+  if (opts?.limit) params.set('limit', String(opts.limit))
+  if (opts?.appId) params.set('app_id', opts.appId)
+  if (opts?.cursor) params.set('cursor', opts.cursor)
+  const qs = params.toString()
+  return getJson(`/api/cockpit/feed${qs ? `?${qs}` : ''}`)
+}
+
+export function getCockpitKpis(appId?: string): Promise<CockpitKpis> {
+  return getJson(`/api/cockpit/kpis${appId ? `?app_id=${encodeURIComponent(appId)}` : ''}`)
+}
+
+export function getCockpitAgents(appId?: string): Promise<CockpitAgentSession[]> {
+  return getJson(`/api/cockpit/agents${appId ? `?app_id=${encodeURIComponent(appId)}` : ''}`)
+}
+
+export function getCockpitBudget(appId: string): Promise<CockpitBudget> {
+  return getJson(`/api/cockpit/budget?app_id=${encodeURIComponent(appId)}`)
 }
