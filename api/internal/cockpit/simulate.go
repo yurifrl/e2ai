@@ -208,6 +208,32 @@ func (s *Service) Simulate(ctx context.Context, req SimulateRequest) (result ing
 		// job); everything else stops at the recorded delivery.
 		Enqueue: req.PayloadShape == "" || req.PayloadShape == ShapeWorkflowRun,
 	}
+	// REVIEW WR-02 (AUDT-01): the audit row must be transactional with the
+	// run insert. A post-ingest audit tx has the same crash window the
+	// webhook path eliminated — a crash between ingest commit and audit
+	// commit records an unattributed run. The hook rides ingest's own tx:
+	// audit commits with the run, or neither commits. The synthetic
+	// workflow_run id is the fallback target when no run row exists
+	// (filtered payloads) — the actor's action is recorded either way.
+	seed.Audit = func(ctx context.Context, tx pgx.Tx, outcome ingest.Result, runIDText string) error {
+		target := runIDText
+		if target == "" {
+			target = strconv.FormatInt(workflowRunID, 10)
+		}
+		return AppendAudit(ctx, tx, AuditEntry{
+			ActorEmail: req.actor,
+			Action:     ActionSimulate,
+			TargetType: "run",
+			TargetID:   target,
+			Reason:     req.Reason,
+			Details: map[string]any{
+				"app":             a.Owner + "/" + a.Repo + "/" + a.WorkflowName + "/" + a.Environment,
+				"payload_shape":   ShapeWorkflowRun,
+				"outcome":         outcome.String(),
+				"workflow_run_id": workflowRunID,
+			},
+		})
+	}
 	result, err = s.Store.Ingest(ctx, seed, s.Queue)
 	if err != nil {
 		return 0, uuid.Nil, 0, fmt.Errorf("simulate ingest: %w", err)
@@ -218,9 +244,6 @@ func (s *Service) Simulate(ctx context.Context, req SimulateRequest) (result ing
 			appID, workflowRunID).Scan(&runID); err != nil {
 			return 0, uuid.Nil, 0, fmt.Errorf("simulate run lookup: %w", err)
 		}
-	}
-	if err := s.auditSimulate(ctx, req, a, result, runID, workflowRunID); err != nil {
-		return 0, uuid.Nil, 0, err
 	}
 	return result, runID, workflowRunID, nil
 }
@@ -311,42 +334,4 @@ func verifyWebhookSignature(secret string, body []byte, header string) bool {
 	mac := hmac.New(sha256.New, []byte(secret))
 	mac.Write(body)
 	return hmac.Equal(mac.Sum(nil), got)
-}
-
-// auditSimulate appends the simulate audit row in its own short transaction —
-// the ingest's internal tx is already committed (or not) by the time the
-// outcome is known; attribution survives independently of the ingest
-// outcome. Target is the run id when ingest created one, else the synthetic
-// workflow_run id — the actor's action is recorded either way.
-func (s *Service) auditSimulate(ctx context.Context, req SimulateRequest, a simApp, result ingest.Result, runID uuid.UUID, wfID int64) error {
-	target := ""
-	if runID != uuid.Nil {
-		target = runID.String()
-	} else {
-		target = strconv.FormatInt(wfID, 10)
-	}
-	tx, err := s.Pool.Begin(ctx)
-	if err != nil {
-		return fmt.Errorf("simulate audit begin: %w", err)
-	}
-	defer func() { _ = tx.Rollback(ctx) }()
-	if err := AppendAudit(ctx, tx, AuditEntry{
-		ActorEmail: req.actor,
-		Action:     ActionSimulate,
-		TargetType: "run",
-		TargetID:   target,
-		Reason:     req.Reason,
-		Details: map[string]any{
-			"app":             a.Owner + "/" + a.Repo + "/" + a.WorkflowName + "/" + a.Environment,
-			"payload_shape":   ShapeWorkflowRun,
-			"outcome":         result.String(),
-			"workflow_run_id": wfID,
-		},
-	}); err != nil {
-		return fmt.Errorf("simulate audit: %w", err)
-	}
-	if err := tx.Commit(ctx); err != nil {
-		return fmt.Errorf("simulate audit commit: %w", err)
-	}
-	return nil
 }

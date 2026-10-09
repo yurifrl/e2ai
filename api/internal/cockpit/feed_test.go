@@ -50,6 +50,37 @@ func utcYesterdaySeed() time.Time {
 	return time.Now().UTC().Add(-26 * time.Hour)
 }
 
+// TestFeedRunSummaryFormat pins the run summary wire contract (REVIEW CR-02):
+// '<environment> run <workflow_run_id> — <STATUS>' with the status suffix in
+// the uppercase vocabulary the web RUN_TONE map keys on ('QUEUED' … 'FAILED'
+// — runs table stores lowercase; the feed renders upper()). A case drift
+// silently degrades every run chip on the command center to a plain kind
+// chip, so the suffix must round-trip through RunStatus.
+func TestFeedRunSummaryFormat(t *testing.T) {
+	pool := testPool(t)
+	if pool == nil {
+		t.Skip("scratch database not configured")
+	}
+	s := feedService(t, pool)
+	ctx := context.Background()
+
+	id := feedRun(t, pool, mustFeedApp(t, pool), "executing", "", utcTodaySeed())
+	page, err := s.Feed(ctx, 50, "", "")
+	if err != nil {
+		t.Fatalf("feed: %v", err)
+	}
+	for _, e := range page.Entries {
+		if e.Kind != FeedKindRun || e.RunID != uuidString(id) {
+			continue
+		}
+		if !strings.HasSuffix(e.Summary, " — EXECUTING") {
+			t.Fatalf("run summary %q must end with ' — EXECUTING' (uppercase for web RUN_TONE)", e.Summary)
+		}
+		return
+	}
+	t.Fatalf("seeded run %s missing from feed", uuidString(id))
+}
+
 // feedRun seeds one runs row with an explicit status/verdict/created_at and
 // a globally unique workflow_run_id (the (app_id, workflow_run_id) unique
 // index forbids the budget helper's constant id in bulk); returns its id.

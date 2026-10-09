@@ -135,6 +135,14 @@ func (s *Service) Trigger(ctx context.Context, req TriggerRequest) (runID uuid.U
 		return uuid.Nil, 0, err
 	}
 
+	// REVIEW WR-03: app_id pins the registered environment (registered_apps is
+	// unique per owner/repo/workflow/environment) — a mismatched label would
+	// stamp a phantom environment onto the run row. Refuse before spending.
+	if req.Environment != a.Environment {
+		return uuid.Nil, 0, fmt.Errorf("%w: environment %q is not the app's registered environment %q",
+			errInvalidRequest, req.Environment, a.Environment)
+	}
+
 	// Gates that read outside the write tx (pause + budget + plan) happen
 	// first; order safety comes from the insert-as-gate index, the final
 	// arbiter inside the tx.
@@ -167,6 +175,13 @@ func (s *Service) Trigger(ctx context.Context, req TriggerRequest) (runID uuid.U
 		return uuid.Nil, 0, fmt.Errorf("begin trigger tx: %w", err)
 	}
 	defer func() { _ = tx.Rollback(ctx) }()
+
+	// REVIEW WR-03: the pre-gate pause read races a pause() commit between
+	// the boundary check and Begin — re-read paused on this tx before
+	// spending anything; a pause landing in the gap stops the run here.
+	if perr := s.checkPausedTx(ctx, tx); perr != nil {
+		return uuid.Nil, 0, perr
+	}
 
 	runID, workflowRunID, inFlight, err := insertManualRun(ctx, s.Pool, tx, pgAppID, headSHA, req)
 	if err != nil {

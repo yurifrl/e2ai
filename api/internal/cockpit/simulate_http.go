@@ -7,7 +7,6 @@
 package cockpit
 
 import (
-	"encoding/json"
 	"errors"
 	"net/http"
 
@@ -46,7 +45,7 @@ func (s *Service) SimulateHTTP(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	var req SimulateRequest
-	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+	if err := decodeCapped(r, &req); err != nil {
 		writeErr(w, http.StatusUnprocessableEntity, "invalid simulate request body")
 		return
 	}

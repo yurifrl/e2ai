@@ -105,6 +105,14 @@ type RunSeed struct {
 	SignatureValid bool
 	Payload        []byte
 	Enqueue        bool
+
+	// Audit rides the ingest transaction when set (REVIEW WR-02, AUDT-01):
+	// fired once right before each commit with the outcome and the inserted
+	// run's id ("" when no run row exists), so attribution commits with the
+	// run or neither commits. A hook error fails the whole ingest — an
+	// unattributed run must not land. Duplicate paths roll back and never
+	// commit, so the hook is not fired there.
+	Audit func(ctx context.Context, tx pgx.Tx, outcome Result, runID string) error
 }
 
 // Store owns the transactional ingest path shared by the webhook handler and
@@ -139,6 +147,13 @@ func (s *Store) Ingest(ctx context.Context, seed RunSeed, queue JobEnqueuer) (Re
 		return ResultDuplicateEvent, nil
 	}
 	if !seed.Enqueue {
+		if seed.Audit != nil {
+			// Fire inside the tx (REVIEW WR-02): attribution commits with
+			// the recorded delivery or neither commits.
+			if err := seed.Audit(ctx, tx, ResultRecorded, ""); err != nil {
+				return 0, fmt.Errorf("seed audit hook: %w", err)
+			}
+		}
 		if err := tx.Commit(ctx); err != nil {
 			return 0, fmt.Errorf("commit ingest tx: %w", err)
 		}
@@ -167,6 +182,13 @@ func (s *Store) Ingest(ctx context.Context, seed RunSeed, queue JobEnqueuer) (Re
 			derive.DeriveDraftArgs{RunID: runID.String(), PRNumber: seed.PRNumber},
 			derive.DeriveOpts()); err != nil {
 			return 0, fmt.Errorf("enqueue %s: %w", derive.KindDeriveDraft, err)
+		}
+	}
+	if seed.Audit != nil {
+		// Fire inside the tx (REVIEW WR-02): attribution commits with the
+		// run row or neither commits.
+		if err := seed.Audit(ctx, tx, ResultAccepted, runID.String()); err != nil {
+			return 0, fmt.Errorf("seed audit hook: %w", err)
 		}
 	}
 	if err := tx.Commit(ctx); err != nil {

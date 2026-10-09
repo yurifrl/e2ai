@@ -8,6 +8,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"regexp"
 
 	"github.com/NSXBet/e2ai/api/internal/plans"
 	"github.com/NSXBet/e2ai/api/internal/runs"
@@ -20,9 +21,17 @@ import (
 // errInvalidRequest marks request-shape violations the boundary maps to 422.
 var errInvalidRequest = errors.New("invalid trigger request")
 
+// shaHex guards operator-supplied SHAs at the only boundary they cross
+// (REVIEW WR-01): the value flows into runner git argv, so anything that is
+// not a plain hex object name is refused where it is born. Case-insensitive:
+// GitHub SHAs are lowercase but users paste mixed-case from web UIs.
+var shaHex = regexp.MustCompile(`(?i)^[0-9a-f]{7,40}$`)
+
 // validate enforces the request contract: app identity, environment, the
 // pinned version, and the per-mode SHA sourcing (TRIG-04). Retest ignores a
-// request head_sha by design — the resolver output replaces it.
+// request head_sha by design — the resolver output replaces it. Plain mode
+// treats an empty head_sha as "resolve the app's latest head" (REVIEW CR-01)
+// and requires a non-empty value to be a hex object name (WR-01).
 func (r *TriggerRequest) validate() error {
 	switch {
 	case r.AppID == "":
@@ -34,8 +43,10 @@ func (r *TriggerRequest) validate() error {
 	}
 	switch r.Mode {
 	case "":
-		if r.HeadSHA == "" {
-			return fmt.Errorf("%w: head_sha is required for a plain manual run", errInvalidRequest)
+		// Empty head_sha means "resolve the app's latest head" server-side
+		// (REVIEW CR-01); a supplied value must be a hex object name.
+		if r.HeadSHA != "" && !shaHex.MatchString(r.HeadSHA) {
+			return fmt.Errorf("%w: head_sha must be a 7-40 char hex object name", errInvalidRequest)
 		}
 	case ModeReproduce:
 		if r.SourceRunID == "" {
@@ -80,6 +91,21 @@ func (s *Service) checkPaused(ctx context.Context) error {
 	state, err := Read(ctx, s.Pool)
 	if err != nil {
 		return fmt.Errorf("cockpit state read: %w", err)
+	}
+	if state.Paused {
+		return fmt.Errorf("%w: %s", ErrPaused, state.PausedReason)
+	}
+	return nil
+}
+
+// checkPausedTx is the transaction-local twin of checkPaused (REVIEW WR-03):
+// the pre-gate pause read races a pause() commit between the boundary check
+// and Begin, so Trigger/Simulate re-read paused on the same tx they are about
+// to spend — a pause landing in the gap still stops the mutation.
+func (s *Service) checkPausedTx(ctx context.Context, tx pgx.Tx) error {
+	state, err := readTx(ctx, tx)
+	if err != nil {
+		return fmt.Errorf("cockpit state re-read: %w", err)
 	}
 	if state.Paused {
 		return fmt.Errorf("%w: %s", ErrPaused, state.PausedReason)
@@ -190,7 +216,10 @@ func (s *Service) resolvePin(ctx context.Context, appID pgtype.UUID, versionID s
 
 // resolveHead applies the mode's SHA sourcing (TRIG-04). reproduce copies the
 // source run's head_sha (same-app enforced); retest asks the HeadResolver —
-// GitHub-backed, read-only, fail-closed with no stored-run fallback.
+// GitHub-backed, read-only, fail-closed with no stored-run fallback. Plain
+// mode resolves "latest" server-side when the operator sent no SHA (REVIEW
+// CR-01) through the same fail-closed resolver; a supplied SHA is a pin and
+// passes through as-is (hex shape already enforced by validate).
 func (s *Service) resolveHead(ctx context.Context, req TriggerRequest, a appRow) (string, error) {
 	switch req.Mode {
 	case ModeRetest:
@@ -212,6 +241,13 @@ func (s *Service) resolveHead(ctx context.Context, req TriggerRequest, a appRow)
 		}
 		return sha, nil
 	default:
+		if req.HeadSHA == "" {
+			sha, err := s.Heads.DefaultBranchHead(ctx, a.Owner, a.Repo)
+			if err != nil {
+				return "", fmt.Errorf("%w: %v", ErrHeadResolve, err)
+			}
+			return sha, nil
+		}
 		return req.HeadSHA, nil
 	}
 }

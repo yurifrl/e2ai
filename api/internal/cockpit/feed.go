@@ -141,8 +141,8 @@ func (s *Service) Feed(ctx context.Context, limit int, appID string, cursor stri
 	rows, err := s.Pool.Query(ctx, `
 		(select r.created_at, r.id, 'run' as kind, r.app_id, r.id::text as run_id,
 		        case when r.environment <> '' then
-		            r.environment || ' run ' || r.workflow_run_id::text || ' — ' || r.status
-		        else 'run ' || r.workflow_run_id::text || ' — ' || r.status end as summary
+		            r.environment || ' run ' || r.workflow_run_id::text || ' — ' || upper(r.status)
+		        else 'run ' || r.workflow_run_id::text || ' — ' || upper(r.status) end as summary
 		 from runs r`+whereRuns+`
 		 order by r.created_at desc, r.id desc
 		 limit $1)

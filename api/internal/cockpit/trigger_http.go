@@ -7,7 +7,6 @@
 package cockpit
 
 import (
-	"encoding/json"
 	"errors"
 	"net/http"
 )
@@ -47,7 +46,7 @@ func (s *Service) TriggerHTTP(w http.ResponseWriter, r *http.Request) {
 	}
 
 	var req TriggerRequest
-	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+	if err := decodeCapped(r, &req); err != nil {
 		writeErr(w, http.StatusUnprocessableEntity, "invalid trigger request body")
 		return
 	}

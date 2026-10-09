@@ -41,7 +41,7 @@ create table runs (
   head_sha text not null, head_branch text,
   environment text not null,
   trigger_source text not null default 'webhook',  -- webhook | reconcile
-  status text not null default 'queued',           -- queued|waiting-rollout|provisioning|executing|reporting|completed|failed
+  status text not null default 'queued',           -- queued|waiting-rollout|provisioning|executing|reporting|completed|failed (lowercase at rest; feed renders upper() per RUN_TONE contract)
   verdict text,          -- pass|fail|flaky|infra_error|inconclusive (set at report; null until then)
   pr_number int, pr_state text,
   total_tests int, passed int, failed int, flaky int, skipped int, duration_ms int,

@@ -14,6 +14,7 @@ package cockpit
 import (
 	"encoding/json"
 	"errors"
+	"io"
 	"net/http"
 	"time"
 
@@ -57,6 +58,21 @@ func (s *Service) State(w http.ResponseWriter, r *http.Request) {
 
 // Pause flips the arm state to paused with an operator reason (edit
 // permission).
+// maxBodyBytes bounds every cockpit POST body (REVIEW WR-06): these payloads
+// are small structured requests (trigger refs, pause reasons, simulate
+// payloads), so anything larger is abuse, and a webhook-payload cap keeps a
+// hostile body from being buffered whole before decode. Simulate's payload is
+// the largest — it carries a rendered webhook body.
+const maxBodyBytes = 1 << 20
+
+// decodeCapped decodes a size-capped JSON body. Returns io.EOF untouched so
+// callers can treat an absent body as valid where the schema allows it (pause
+// reason is optional); any other decode failure is a request-shape violation.
+func decodeCapped(r *http.Request, v any) error {
+	r.Body = http.MaxBytesReader(nil, r.Body, maxBodyBytes)
+	return json.NewDecoder(r.Body).Decode(v)
+}
+
 func (s *Service) Pause(w http.ResponseWriter, r *http.Request) {
 	s.mutate(w, r, true)
 }
@@ -83,11 +99,14 @@ func (s *Service) mutate(w http.ResponseWriter, r *http.Request, paused bool) {
 	}
 
 	// Reason is optional; an empty or absent body is fine (approvals notes
-	// pattern).
+	// pattern). A malformed non-empty body is refused (REVIEW WR-06).
 	var body struct {
 		Reason string `json:"reason"`
 	}
-	_ = json.NewDecoder(r.Body).Decode(&body)
+	if err := decodeCapped(r, &body); err != nil && !errors.Is(err, io.EOF) {
+		writeErr(w, http.StatusUnprocessableEntity, "invalid pause request body")
+		return
+	}
 	if len(body.Reason) > reasonMaxLen {
 		writeErr(w, http.StatusBadRequest, "reason too long")
 		return

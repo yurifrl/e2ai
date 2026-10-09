@@ -47,6 +47,24 @@ func Read(ctx context.Context, pool *pgxpool.Pool) (State, error) {
 	return s, nil
 }
 
+// readTx is Read against an open transaction — the in-tx pause re-check
+// (REVIEW WR-03) reads the row the pause tx is committing on the same
+// connection it will spend on. Same missing-row default as Read.
+func readTx(ctx context.Context, tx pgx.Tx) (State, error) {
+	var s State
+	err := tx.QueryRow(ctx, `
+		select paused, coalesce(paused_reason, ''), coalesce(paused_by, ''), paused_at, updated_at
+		from cockpit_state
+		where id = true`).Scan(&s.Paused, &s.PausedReason, &s.PausedBy, &s.PausedAt, &s.UpdatedAt)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return State{UpdatedAt: time.Now().UTC()}, nil
+	}
+	if err != nil {
+		return State{}, fmt.Errorf("read cockpit_state: %w", err)
+	}
+	return s, nil
+}
+
 // SetPaused flips the arm state and appends the audit row in one transaction:
 // the flag change and its attribution commit together or not at all
 // (AUDT-01). Unpausing clears the pause attribution — the row always
